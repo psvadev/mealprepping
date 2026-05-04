@@ -426,11 +426,11 @@ function App() {
         },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514",
-          max_tokens: Math.max(3000, suggestionCount*220),
+          max_tokens: Math.max(3000, suggestionCount*weeks*220),
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Foreslå ${suggestionCount} middager for en norsk familie. Hver rett lages i ${portions} porsjoner.
+            content:`Foreslå ${suggestionCount * weeks} middager for en norsk familie (${suggestionCount} per uke, ${weeks} uke${weeks>1?"r":""}). Hver rett lages i ${portions} porsjoner.
 Familien ønsker omtrent denne proteinfordelingen per uke (veiledende, ikke absolutt): ${targets}.
 Alle middager skal ha forberedelsestid på MAKS ${maxTime} minutter.${cuisineLine}${exclusionLine}${avoidLine}${historyLine}
 Gi god variasjon i kjøkken og tilberedningsmetode: norske klassikere, asiatisk inspirert, middelhavet, supper, ovnsretter osv. IKKE gjenta samme rett eller veldig like retter.
@@ -1072,7 +1072,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                 }}>★ Favoritter{favourites.length>0 ? ` (${favourites.length})` : ""}</button>
                 <div style={{ display:"flex", alignItems:"center", gap:6, background:"#18191c",
                   border:"1px solid #22232a", borderRadius:7, padding:"4px 10px" }}>
-                  <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Antall</span>
+                  <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Forslag/uke</span>
                   <Stepper value={suggestionCount} min={5} max={30} step={5} onChange={setSuggestionCount} />
                 </div>
                 <button onClick={generateSuggestions} disabled={loading} style={{
@@ -1429,7 +1429,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   <Stepper value={portions} min={1} max={20} onChange={setPortions} />
                 </div>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Antall forslag</label>
+                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Forslag per uke</label>
                   <Stepper value={suggestionCount} min={5} max={30} step={5} onChange={setSuggestionCount} />
                 </div>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
