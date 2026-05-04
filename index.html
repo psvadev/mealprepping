@@ -39,6 +39,19 @@ const PROTEINS = [
   { key:"vegeta",  label:"Vegetar",        emoji:"🥕", color:"#7abf7a", bg:"#141c14" },
 ];
 
+const MEAL_CATEGORIES = [
+  { key:"suppe",    label:"Suppe",      emoji:"🍲" },
+  { key:"ovn",      label:"Ovnsrett",   emoji:"🫕" },
+  { key:"gryte",    label:"Gryte",      emoji:"🥘" },
+  { key:"pasta",    label:"Pasta/Ris",  emoji:"🍝" },
+  { key:"kjapp",    label:"Kjapp",      emoji:"⚡" },
+  { key:"salat",    label:"Salat/Lett", emoji:"🥗" },
+  { key:"wrap",     label:"Wrap/Taco",  emoji:"🌮" },
+  { key:"klassisk", label:"Klassisk",   emoji:"🍽️" },
+];
+
+const LEFTOVER_MEAL = { name:"Rester", emoji:"♻️", protein:"leftover", leftover:true, description:"Rester fra en annen dag." };
+
 const CUISINE_LIBRARY = [
   { key:"norsk",       label:"Norsk/Nordisk",  emoji:"🐟" },
   { key:"italiensk",   label:"Italiensk",      emoji:"🍝" },
@@ -171,7 +184,8 @@ function App() {
   // UI state
   const [view,          setView]          = useState('plan');
   const [loading,       setLoading]       = useState(false);
-  const [shoppingList,  setShoppingList]  = useState(() => lsGet('shoppingList', null));
+  const [shoppingLists, setShoppingLists] = useState(() => lsGet('shoppingLists', {}));
+  const [shoppingWeek,  setShoppingWeek]  = useState(0);
   const [shoppingLoading,setShoppingLoading] = useState(false);
   const [error,         setError]         = useState(null);
   const [activeCell,    setActiveCell]    = useState(null);
@@ -180,12 +194,13 @@ function App() {
   const [planModal,     setPlanModal]     = useState(null);
   const [recipeCache,   setRecipeCache]   = useState(() => lsGet('recipeCache', {}));
   const [recipeLoading, setRecipeLoading] = useState(null);
-  const [filterProtein, setFilterProtein] = useState(null);
+  const [filterProtein,   setFilterProtein]   = useState(null);
+  const [filterCategory,  setFilterCategory]  = useState(null);
   const [showProtein,   setShowProtein]   = useState(false);
   const [showCuisine,   setShowCuisine]   = useState(false);
   const [showFavourites,setShowFavourites]= useState(false);
   const [confirmClear,  setConfirmClear]  = useState(false);
-  const [lastShoppingKey,setLastShoppingKey] = useState(() => lsGet('lastShoppingKey',''));
+  const [lastShoppingKeys,setLastShoppingKeys]=useState(() => lsGet('lastShoppingKeys',{}));
   const [notesDraft,    setNotesDraft]    = useState('');
 
   const importRef = useRef(null);
@@ -208,8 +223,8 @@ function App() {
   useEffect(() => lsSet('suggestionCount', suggestionCount), [suggestionCount]);
   useEffect(() => lsSet('units',           units),           [units]);
   useEffect(() => lsSet('recipeCache',     recipeCache),     [recipeCache]);
-  useEffect(() => lsSet('shoppingList',    shoppingList),    [shoppingList]);
-  useEffect(() => lsSet('lastShoppingKey', lastShoppingKey), [lastShoppingKey]);
+  useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
+  useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
 
   // Sync note draft when modal opens
   useEffect(() => {
@@ -219,7 +234,7 @@ function App() {
   // ── Computed ─────────────────────────────────────────────────────────────
   const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
   const totalTargeted = Object.values(proteinTargets).reduce((a,b)=>a+b, 0);
-  const planKey = plan.slice(0,weeks).flat().map(m=>m?.name||'').join('|')+'|'+portions;
+  const weekPlanKey = (w) => plan[w].map(m=>m?.name||'').join('|')+'|'+portions;
   const filledCount = plan.slice(0,weeks).flat().filter(Boolean).length;
   const totalSlots = weeks * 7;
 
@@ -244,9 +259,10 @@ function App() {
 
   const filteredSuggestions = useMemo(() => suggestions.filter(m => {
     if (filterProtein && m.protein !== filterProtein) return false;
+    if (filterCategory && m.category !== filterCategory) return false;
     if (m.prepTime) { const mins=parseInt(m.prepTime); if (!isNaN(mins) && mins>maxTime) return false; }
     return true;
-  }), [suggestions, filterProtein, maxTime]);
+  }), [suggestions, filterProtein, filterCategory, maxTime]);
 
   // ── Meal history ─────────────────────────────────────────────────────────
   const addToHistory = useCallback((meal) => {
@@ -257,12 +273,12 @@ function App() {
   const assignMeal = useCallback((meal, week, day) => {
     const existing = plan[week][day];
     setPlan(prev => { const next=prev.map(w=>[...w]); next[week][day]=meal; return next; });
-    setSuggestions(prev => {
+    if (!meal.leftover) setSuggestions(prev => {
       let next = prev.filter(m=>m.name!==meal.name);
-      if (existing && !next.find(m=>m.name===existing.name)) next=[...next,existing];
+      if (existing && !existing.leftover && !next.find(m=>m.name===existing.name)) next=[...next,existing];
       return next;
     });
-    addToHistory(meal);
+    if (!meal.leftover) addToHistory(meal);
     setActiveCell(null);
   }, [plan, addToHistory]);
 
@@ -290,8 +306,8 @@ function App() {
     if (newUnits === units) return;
     setUnits(newUnits);
     setRecipeCache({});
-    setShoppingList(null);
-    setLastShoppingKey('');
+    setShoppingLists({});
+    setLastShoppingKeys({});
   };
 
   // ── Cuisine enable/disable ────────────────────────────────────────────────
@@ -415,12 +431,14 @@ Svar med dette JSON-formatet:
       "prepTime": "30 min",
       "freezer": true,
       "protein": "fisk",
+      "category": "suppe",
       "tags": ["norsk", "ovnsrett"],
       "description": "Kort beskrivelse på 1 setning"
     }
   ]
 }
-Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
+Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta".
+Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat", "wrap", "klassisk".`
           }]
         })
       });
@@ -438,14 +456,17 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
   }, [anthropicKey, portions, proteinTargets, maxTime, exclusions, allCuisines, cuisineTargets, suggestionCount, plan, mealHistory]);
 
   // ── Shopping list ─────────────────────────────────────────────────────────
-  const generateShoppingList = async (force=false) => {
+  const generateShoppingList = async (week, force=false) => {
+    if (week === undefined) week = shoppingWeek;
     const plannedMeals = [];
-    for (let w=0;w<weeks;w++) for (let d=0;d<7;d++) if (plan[w][d]) plannedMeals.push(plan[w][d].name);
-    if (!plannedMeals.length) { setError("Legg til noen middager i planen først."); return; }
+    for (let d=0;d<7;d++) if (plan[week]?.[d] && !plan[week][d].leftover) plannedMeals.push(plan[week][d].name);
+    if (!plannedMeals.length) { setError(`Ingen middager planlagt for uke ${week+1}.`); setView("shopping"); return; }
+    setShoppingWeek(week);
     setView("shopping");
-    if (!force && shoppingList && planKey===lastShoppingKey) return;
+    const wKey = weekPlanKey(week);
+    if (!force && shoppingLists[week] && wKey===lastShoppingKeys[week]) return;
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
-    setShoppingLoading(true); setShoppingList(null); setError(null);
+    setShoppingLoading(true); setError(null);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
@@ -461,7 +482,7 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Lag en handleliste for disse middagene. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
+            content:`Lag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
             } Inkluder totalt prisestimat basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
@@ -471,8 +492,10 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
       const data = await res.json();
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
-      if (parsed?.categories) { setShoppingList(parsed); setLastShoppingKey(planKey); }
-      else setError("Kunne ikke generere handleliste.");
+      if (parsed?.categories) {
+        setShoppingLists(prev=>({...prev,[week]:parsed}));
+        setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
+      } else setError("Kunne ikke generere handleliste.");
     } catch { setError("Nettverksfeil."); }
     setShoppingLoading(false);
   };
@@ -480,7 +503,7 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
   // ── Export / import ───────────────────────────────────────────────────────
   const exportPlan = () => {
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
-      cuisineTargets, enabledCuisines, suggestionCount, units, favourites, mealNotes,
+      cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, favourites, mealNotes,
       mealHistory, exportedAt: new Date().toISOString() };
     const date = new Date().toISOString().split('T')[0];
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
@@ -502,6 +525,7 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
         if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
         if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
         if (d.units) setUnits(d.units);
+        if (d.shoppingLists) setShoppingLists(d.shoppingLists);
         if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
         if (d.favourites) setFavourites(d.favourites);
         if (d.mealNotes) setMealNotes(d.mealNotes);
@@ -514,16 +538,17 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
   };
 
   const exportShoppingList = () => {
-    if (!shoppingList) return;
+    const sl = shoppingLists[shoppingWeek];
+    if (!sl) return;
     const date = new Date().toLocaleDateString("nb-NO");
-    const header = `Handleliste — ${portions} porsjoner per rett, ${weeks} uke(r)\nGenerert ${date}\n\n`;
-    const lines = shoppingList.categories.map(cat =>
+    const header = `Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett\nGenerert ${date}\n\n`;
+    const lines = sl.categories.map(cat =>
       `${cat.emoji} ${cat.name}\n${cat.items.map(i=>`  - ${i.name}: ${i.amount}`).join("\n")}`
     ).join("\n\n");
-    const price = shoppingList.totalPrice
-      ? `\n\nEstimert totalpris: ca. ${shoppingList.totalPrice.low}–${shoppingList.totalPrice.high} kr`
+    const price = sl.totalPrice
+      ? `\n\nEstimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr`
       : "";
-    downloadFile(header+lines+price, 'handleliste.txt', 'text/plain;charset=utf-8');
+    downloadFile(header+lines+price, `handleliste-uke${shoppingWeek+1}.txt`, 'text/plain;charset=utf-8');
   };
 
   const printPlan = () => {
@@ -535,11 +560,12 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
       return `<tr><td>Uke ${w+1}</td>${cells}</tr>`;
     }).join("");
 
-    const shoppingHtml = shoppingList ? `
-      <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste — ${portions} porsjoner per rett</h2>
-      ${shoppingList.totalPrice ? `<p class="price">Estimert totalpris: ca. ${shoppingList.totalPrice.low}–${shoppingList.totalPrice.high} kr</p>` : ""}
+    const sl = shoppingLists[shoppingWeek];
+    const shoppingHtml = sl ? `
+      <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett</h2>
+      ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr</p>` : ""}
       <div style="display:flex;flex-wrap:wrap;gap:16px">
-        ${shoppingList.categories.map(cat=>`<div class="cat-box">
+        ${sl.categories.map(cat=>`<div class="cat-box">
           <div class="cat-title">${cat.emoji} ${cat.name}</div>
           <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
         </div>`).join("")}
@@ -678,7 +704,7 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
             {/* View tabs + actions */}
             <div style={{ marginLeft:"auto", display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
               <button onClick={()=>setView("plan")} style={btnTab(view==="plan")}>📅 Plan</button>
-              <button onClick={generateShoppingList} style={btnTab(view==="shopping")}>
+              <button onClick={()=>generateShoppingList(shoppingWeek)} style={btnTab(view==="shopping")}>
                 🛒 Handleliste{filledCount>0 ? ` (${filledCount})` : ""}
               </button>
               <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger</button>
@@ -815,15 +841,15 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                       {Array.from({length:7},(_,d) => {
                         const meal = plan[w][d];
                         const isActive = activeCell?.week===w && activeCell?.day===d;
-                        const pColor = meal?.protein ? PROTEINS.find(p=>p.key===meal.protein)?.color : null;
-                        const hasNote = meal && mealNotes[meal.name];
+                        const pColor = meal?.leftover ? null : meal?.protein ? PROTEINS.find(p=>p.key===meal.protein)?.color : null;
+                        const hasNote = meal && !meal.leftover && mealNotes[meal.name];
                         return (
                           <td key={d} style={{ padding:2 }}>
                             <div
                               onClick={() => {
                                 if (meal) {
                                   if (activeCell) { assignMeal(meal, activeCell.week, activeCell.day); }
-                                  else { setPlanModal({meal,week:w,day:d}); fetchRecipe(meal); }
+                                  else { setPlanModal({meal,week:w,day:d}); if (!meal.leftover) fetchRecipe(meal); }
                                 } else { setActiveCell(isActive ? null : {week:w,day:d}); }
                               }}
                               onDragOver={e=>{ if(dragMeal){e.preventDefault();e.currentTarget.style.borderColor="#e8a838";e.currentTarget.style.background="#1e1c14";}}}
@@ -833,8 +859,9 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                                 if (dragMeal) {
                                   const existing=plan[w][d];
                                   setPlan(prev=>{ const next=prev.map(r=>[...r]); next[w][d]=dragMeal; return next; });
-                                  setSuggestions(prev=>{ let next=prev.filter(m=>m.name!==dragMeal.name); if(existing&&!next.find(m=>m.name===existing.name)) next=[...next,existing]; return next; });
-                                  addToHistory(dragMeal); setDragMeal(null); setActiveCell(null);
+                                  if (!dragMeal.leftover) setSuggestions(prev=>{ let next=prev.filter(m=>m.name!==dragMeal.name); if(existing&&!existing.leftover&&!next.find(m=>m.name===existing.name)) next=[...next,existing]; return next; });
+                                  if (!dragMeal.leftover) addToHistory(dragMeal);
+                                  setDragMeal(null); setActiveCell(null);
                                 }
                               }}
                               style={{ minHeight:68, borderRadius:8,
@@ -845,15 +872,23 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                                 gap:2, transition:"border 0.1s, background 0.1s", position:"relative" }}
                             >
                               {meal ? (
-                                <>
-                                  <span style={{ fontSize:16 }}>{meal.emoji}</span>
-                                  <span style={{ fontSize:9, color:"#ddd8ce", fontFamily:"sans-serif",
-                                    textAlign:"center", lineHeight:1.3, fontWeight:500 }}>{meal.name}</span>
-                                  {pColor && <div style={{ width:14, height:3, borderRadius:2,
-                                    background:pColor, marginTop:2, opacity:0.7 }} />}
-                                  {hasNote && <span style={{ position:"absolute", top:4, right:4,
-                                    fontSize:8, color:"#e8a838", opacity:0.8 }}>📝</span>}
-                                </>
+                                meal.leftover ? (
+                                  <>
+                                    <span style={{ fontSize:16, opacity:0.5 }}>♻️</span>
+                                    <span style={{ fontSize:9, color:"#747280", fontFamily:"sans-serif",
+                                      textAlign:"center", lineHeight:1.3, fontStyle:"italic" }}>Rester</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{ fontSize:16 }}>{meal.emoji}</span>
+                                    <span style={{ fontSize:9, color:"#ddd8ce", fontFamily:"sans-serif",
+                                      textAlign:"center", lineHeight:1.3, fontWeight:500 }}>{meal.name}</span>
+                                    {pColor && <div style={{ width:14, height:3, borderRadius:2,
+                                      background:pColor, marginTop:2, opacity:0.7 }} />}
+                                    {hasNote && <span style={{ position:"absolute", top:4, right:4,
+                                      fontSize:8, color:"#e8a838", opacity:0.8 }}>📝</span>}
+                                  </>
+                                )
                               ) : isActive ? (
                                 <span style={{ fontSize:16, opacity:0.6 }}>👆</span>
                               ) : (
@@ -981,22 +1016,34 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                   fontFamily:"sans-serif", letterSpacing:"1px" }}>MIDDAGSFORSLAG</h2>
                 {suggestions.length>0 && (
                   <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                    <button onClick={()=>setFilterProtein(null)} style={{
+                    <button onClick={()=>{setFilterProtein(null);setFilterCategory(null);}} style={{
                       fontSize:10, padding:"3px 9px", borderRadius:10,
-                      border: !filterProtein ? "1px solid #e8a838" : "1px solid #2a2b30",
-                      background: !filterProtein ? "#22232a" : "transparent",
-                      color: !filterProtein ? "#e8e0d0" : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
+                      border: !filterProtein && !filterCategory ? "1px solid #e8a838" : "1px solid #2a2b30",
+                      background: !filterProtein && !filterCategory ? "#22232a" : "transparent",
+                      color: !filterProtein && !filterCategory ? "#e8e0d0" : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
                     }}>Alle</button>
                     {PROTEINS.map(p => {
                       const count = suggestions.filter(s=>s.protein===p.key).length;
                       if (!count) return null;
                       return (
-                        <button key={p.key} onClick={()=>setFilterProtein(filterProtein===p.key?null:p.key)} style={{
+                        <button key={p.key} onClick={()=>{setFilterProtein(filterProtein===p.key?null:p.key);setFilterCategory(null);}} style={{
                           fontSize:10, padding:"3px 9px", borderRadius:10,
                           border: filterProtein===p.key ? `1px solid ${p.color}` : "1px solid #2a2b30",
                           background: filterProtein===p.key ? p.bg : "transparent",
                           color: filterProtein===p.key ? p.color : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
                         }}>{p.emoji} {p.label} ({count})</button>
+                      );
+                    })}
+                    {MEAL_CATEGORIES.map(cat => {
+                      const count = suggestions.filter(s=>s.category===cat.key).length;
+                      if (!count) return null;
+                      return (
+                        <button key={cat.key} onClick={()=>{setFilterCategory(filterCategory===cat.key?null:cat.key);setFilterProtein(null);}} style={{
+                          fontSize:10, padding:"3px 9px", borderRadius:10,
+                          border: filterCategory===cat.key ? "1px solid #a8a6b6" : "1px solid #2a2b30",
+                          background: filterCategory===cat.key ? "#22232a" : "transparent",
+                          color: filterCategory===cat.key ? "#e8e0d0" : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
+                        }}>{cat.emoji} {cat.label} ({count})</button>
                       );
                     })}
                   </div>
@@ -1028,6 +1075,25 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                 Henter middagsforslag...
               </div>
             )}
+
+            {/* Rester chip — always draggable, clickable in select mode */}
+            <div style={{ marginBottom:8 }}>
+              <div draggable
+                onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);e.dataTransfer.effectAllowed="move";}}
+                onDragEnd={()=>setDragMeal(null)}
+                onClick={()=>{ if(activeCell) assignMeal(LEFTOVER_MEAL,activeCell.week,activeCell.day); }}
+                style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px",
+                  borderRadius:8, border:"1px dashed #2a2b30", background:"transparent",
+                  cursor: activeCell ? "pointer" : "grab", color:"#747280",
+                  fontFamily:"sans-serif", fontSize:11,
+                  ...(activeCell && {borderColor:"#e8a838", color:"#e8a838"}) }}>
+                <span style={{ opacity:0.7 }}>♻️</span>
+                <span>Rester-dag</span>
+                {activeCell
+                  ? <span style={{ fontSize:10, fontWeight:600 }}>→ klikk for å sette inn</span>
+                  : <span style={{ fontSize:10, color:"#4a4858" }}>dra til kalender</span>}
+              </div>
+            </div>
 
             {/* Suggestion cards */}
             {filteredSuggestions.length>0 && (
@@ -1064,6 +1130,10 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                         <span style={{ fontSize:10, padding:"2px 6px", background:"#141517",
                           borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>⏱ {meal.prepTime}</span>
                         <ProteinBadge protein={meal.protein} />
+                        {meal.category && (() => { const cat=MEAL_CATEGORIES.find(c=>c.key===meal.category); return cat ? (
+                          <span style={{ fontSize:10, padding:"2px 6px", background:"#141517",
+                            borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>{cat.emoji} {cat.label}</span>
+                        ) : null; })()}
                       </div>
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
                         fontFamily:"sans-serif", textAlign:"center", fontWeight:600 }}>Klikk for å velge →</div>}
@@ -1166,20 +1236,20 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
         {/* ── SHOPPING VIEW ── */}
         {view==="shopping" && (
           <div>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
               <button onClick={()=>setView("plan")} style={{ background:"transparent", border:"1px solid #2a2b30",
                 color:"#b4b2c2", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>
                 ← Tilbake
               </button>
               <h2 style={{ margin:0, fontSize:14, color:"#e8e0d0", fontFamily:"sans-serif" }}>
-                Handleliste — {portions} porsjoner per rett, {weeks} {weeks===1?"uke":"uker"}
+                🛒 Handleliste — {portions} porsjoner per rett
               </h2>
               <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-                <button onClick={()=>generateShoppingList(true)} disabled={shoppingLoading} style={{
+                <button onClick={()=>generateShoppingList(shoppingWeek, true)} disabled={shoppingLoading} style={{
                   padding:"6px 14px", borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
                   color:shoppingLoading?"#747280":"#b4b2c2", cursor:shoppingLoading?"not-allowed":"pointer",
                   fontSize:12, fontFamily:"sans-serif" }}>🔄 Regenerer</button>
-                {shoppingList && (
+                {shoppingLists[shoppingWeek] && (
                   <button onClick={exportShoppingList} style={{
                     padding:"6px 14px", borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
                     color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
@@ -1189,54 +1259,73 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
               </div>
             </div>
 
+            {/* Week tabs */}
+            <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+              {Array.from({length:weeks},(_,w) => {
+                const hasList = !!shoppingLists[w];
+                const isActive = shoppingWeek===w;
+                return (
+                  <button key={w} onClick={()=>generateShoppingList(w)}
+                    style={{ padding:"6px 16px", borderRadius:7, cursor:"pointer", fontFamily:"sans-serif",
+                      border: isActive ? "2px solid #e8a838" : "1px solid #2a2b30",
+                      background: isActive ? "#22232a" : "transparent",
+                      color: isActive ? "#e8e0d0" : "#b4b2c2", fontSize:12 }}>
+                    Uke {w+1}{hasList ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+
             {shoppingLoading && (
               <div style={{ textAlign:"center", padding:"60px 0", color:"#a8a6b6", fontFamily:"sans-serif", fontSize:13 }}>
-                Genererer handleliste...
+                Genererer handleliste for uke {shoppingWeek+1}...
               </div>
             )}
 
-            {shoppingList && (
-              <>
-                {shoppingList.totalPrice && (
-                  <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:8,
-                    padding:"10px 14px", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
-                    <span style={{ fontSize:14 }}>🛒</span>
-                    <span style={{ fontSize:13, color:"#e4ddd0", fontFamily:"sans-serif", fontWeight:600 }}>
-                      Estimert totalpris: ca. {shoppingList.totalPrice.low}–{shoppingList.totalPrice.high} kr
-                    </span>
-                    <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
-                      · {Math.round((shoppingList.totalPrice.low+shoppingList.totalPrice.high)/2/portions/7)} kr/porsjon/dag ca.
-                    </span>
-                  </div>
-                )}
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))", gap:10 }}>
-                  {shoppingList.categories.map((cat,i) => (
-                    <div key={i} style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10, padding:"12px 14px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:10,
-                        paddingBottom:8, borderBottom:"1px solid #22232a" }}>
-                        <span style={{ fontSize:16 }}>{cat.emoji}</span>
-                        <span style={{ fontSize:12, fontWeight:700, color:"#ddd8ce", fontFamily:"sans-serif" }}>{cat.name}</span>
-                      </div>
-                      <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                        {cat.items.map((item,j) => (
-                          <li key={j} style={{ display:"flex", justifyContent:"space-between",
-                            alignItems:"baseline", padding:"4px 0",
-                            borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none" }}>
-                            <span style={{ fontSize:12, color:"#d4cdc4", fontFamily:"sans-serif" }}>{item.name}</span>
-                            <span style={{ fontSize:11, color:"#b8b0a8", fontFamily:"sans-serif", marginLeft:8 }}>{item.amount}</span>
-                          </li>
-                        ))}
-                      </ul>
+            {shoppingLists[shoppingWeek] && !shoppingLoading && (() => {
+              const sl = shoppingLists[shoppingWeek];
+              return (
+                <>
+                  {sl.totalPrice && (
+                    <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:8,
+                      padding:"10px 14px", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:13, color:"#e4ddd0", fontFamily:"sans-serif", fontWeight:600 }}>
+                        Estimert totalpris uke {shoppingWeek+1}: ca. {sl.totalPrice.low}–{sl.totalPrice.high} kr
+                      </span>
+                      <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
+                        · {Math.round((sl.totalPrice.low+sl.totalPrice.high)/2/portions/7)} kr/porsjon/dag ca.
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
+                  )}
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))", gap:10 }}>
+                    {sl.categories.map((cat,i) => (
+                      <div key={i} style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10, padding:"12px 14px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:10,
+                          paddingBottom:8, borderBottom:"1px solid #22232a" }}>
+                          <span style={{ fontSize:16 }}>{cat.emoji}</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:"#ddd8ce", fontFamily:"sans-serif" }}>{cat.name}</span>
+                        </div>
+                        <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                          {cat.items.map((item,j) => (
+                            <li key={j} style={{ display:"flex", justifyContent:"space-between",
+                              alignItems:"baseline", padding:"4px 0",
+                              borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none" }}>
+                              <span style={{ fontSize:12, color:"#d4cdc4", fontFamily:"sans-serif" }}>{item.name}</span>
+                              <span style={{ fontSize:11, color:"#b8b0a8", fontFamily:"sans-serif", marginLeft:8 }}>{item.amount}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
 
-            {!shoppingLoading && !shoppingList && (
+            {!shoppingLoading && !shoppingLists[shoppingWeek] && (
               <div style={{ textAlign:"center", padding:"40px 20px", color:"#747280",
                 fontFamily:"sans-serif", fontSize:13, border:"1px dashed #22232a", borderRadius:12 }}>
-                Ingen middager lagt til i planen ennå.
+                Klikk på en uke ovenfor for å generere handleliste for den uken.
               </div>
             )}
           </div>
@@ -1480,19 +1569,22 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
             </p>
 
             {/* Recipe */}
-            {recipeLoading===planModal.meal.name && (
+            {planModal.meal.leftover ? (
+              <div style={{ padding:"20px 0", fontSize:13, color:"#747280", fontFamily:"sans-serif", fontStyle:"italic" }}>
+                Denne dagen er satt av til rester. Ingen oppskrift nødvendig.
+              </div>
+            ) : recipeLoading===planModal.meal.name ? (
               <div style={{ textAlign:"center", padding:"24px 0", fontSize:13, color:"#747280", fontFamily:"sans-serif" }}>
                 Laster oppskrift...
               </div>
-            )}
-            {!recipeCache[planModal.meal.name] && recipeLoading!==planModal.meal.name && (
+            ) : !recipeCache[planModal.meal.name] ? (
               <button onClick={()=>fetchRecipe(planModal.meal)} style={{ padding:"7px 16px", borderRadius:7,
                 border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                 cursor:"pointer", fontSize:12, fontFamily:"sans-serif", marginBottom:16 }}>
                 Last inn oppskrift
               </button>
-            )}
-            {recipeCache[planModal.meal.name] && (() => {
+            ) : null}
+            {!planModal.meal.leftover && recipeCache[planModal.meal.name] && (() => {
               const recipe = recipeCache[planModal.meal.name];
               return (
                 <div>
