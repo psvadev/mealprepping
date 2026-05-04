@@ -100,6 +100,8 @@ Three top-level views switched by `setView(...)`:
 
 Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amounts, searches `kassal.app/api/v1/products?search=...&unique=true&size=3`. Averages lowest prices found. Returns `{low, high, source:"kassal"}` if ≥2 ingredients matched, otherwise `null`. Attached to `recipe.pricePerPortion` after recipe fetch.
 
+**Hobby plan limits** — the free Kassal API tier allows 60 req/min, no commercial use, no support. Each recipe fetch makes up to 4 Kassal requests (one per meaningful ingredient). In normal use this is not a concern — a user would need to expand ~15 recipe cards within a single minute to approach the limit, which is unlikely. No rate-limit handling is implemented; if the limit is hit, `fetchKassalPrice` will return `null` and the app falls back to the AI price estimate silently. If usage grows, the only mitigation needed would be reducing the ingredient cap below 4 or adding a short delay between searches.
+
 ---
 
 ## Export / import
