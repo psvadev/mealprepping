@@ -201,6 +201,10 @@ function App() {
   const [confirmClear,  setConfirmClear]  = useState(false);
   const [lastShoppingKeys,setLastShoppingKeys]=useState(() => lsGet('lastShoppingKeys',{}));
   const [notesDraft,    setNotesDraft]    = useState('');
+  const [githubToken,   setGithubToken]   = useState(() => lsGet('githubToken', ''));
+  const [gistId,        setGistId]        = useState(() => lsGet('gistId', ''));
+  const [gistStatus,    setGistStatus]    = useState(null);
+  const [gistLoading,   setGistLoading]   = useState(false);
 
   const importRef = useRef(null);
 
@@ -238,6 +242,8 @@ function App() {
   useEffect(() => lsSet('recipeCache',     recipeCache),     [recipeCache]);
   useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
   useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
+  useEffect(() => lsSet('githubToken',      githubToken),      [githubToken]);
+  useEffect(() => lsSet('gistId',           gistId),           [gistId]);
 
   // Sync note draft when modal opens
   useEffect(() => {
@@ -581,6 +587,65 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       ? `\n\nEstimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr`
       : "";
     downloadFile(header+lines+price, `handleliste-uke${shoppingWeek+1}.txt`, 'text/plain;charset=utf-8');
+  };
+
+  const GIST_FILENAME = 'mealprepping-plan.json';
+
+  const gistPayload = () => ({
+    plan, suggestions, favourites, mealHistory, mealNotes, recipeCache,
+    shoppingLists, lastShoppingKeys, proteinTargets, cuisineTargets,
+    enabledCuisines, weeks, portions, maxTime, exclusions, suggestionCount, units,
+  });
+
+  const pushToGist = async () => {
+    if (!githubToken) { setGistStatus({ ok:false, msg:'Legg inn GitHub-token først.' }); return; }
+    setGistLoading(true); setGistStatus(null);
+    try {
+      const body = { description:'Middagsplanner — skysynk', public:false,
+        files:{ [GIST_FILENAME]:{ content: JSON.stringify(gistPayload()) } } };
+      const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
+      const r = await fetch(url, { method: gistId ? 'PATCH' : 'POST',
+        headers:{ Authorization:`Bearer ${githubToken}`, 'Content-Type':'application/json' },
+        body: JSON.stringify(body) });
+      if (!r.ok) throw new Error(`GitHub ${r.status}`);
+      const d = await r.json();
+      if (!gistId) setGistId(d.id);
+      setGistStatus({ ok:true, msg:`Synkronisert ${new Date().toLocaleTimeString("nb-NO")}` });
+    } catch (e) { setGistStatus({ ok:false, msg:`Feil: ${e.message}` }); }
+    setGistLoading(false);
+  };
+
+  const pullFromGist = async () => {
+    if (!githubToken || !gistId) { setGistStatus({ ok:false, msg:'Token og Gist ID kreves — push først.' }); return; }
+    setGistLoading(true); setGistStatus(null);
+    try {
+      const r = await fetch(`https://api.github.com/gists/${gistId}`,
+        { headers:{ Authorization:`Bearer ${githubToken}` } });
+      if (!r.ok) throw new Error(`GitHub ${r.status}`);
+      const d = await r.json();
+      const raw = d.files?.[GIST_FILENAME]?.content;
+      if (!raw) throw new Error('Fant ikke planfilen i Gist');
+      const s = JSON.parse(raw);
+      if (s.plan)            setPlan(s.plan);
+      if (s.suggestions)     setSuggestions(s.suggestions);
+      if (s.favourites)      setFavourites(s.favourites);
+      if (s.mealHistory)     setMealHistory(s.mealHistory);
+      if (s.mealNotes)       setMealNotes(s.mealNotes);
+      if (s.recipeCache)     setRecipeCache(s.recipeCache);
+      if (s.shoppingLists)   setShoppingLists(s.shoppingLists);
+      if (s.lastShoppingKeys)setLastShoppingKeys(s.lastShoppingKeys);
+      if (s.proteinTargets)  setProteinTargets(s.proteinTargets);
+      if (s.cuisineTargets)  setCuisineTargets(s.cuisineTargets);
+      if (s.enabledCuisines) setEnabledCuisines(s.enabledCuisines);
+      if (s.weeks)           setWeeks(s.weeks);
+      if (s.portions)        setPortions(s.portions);
+      if (s.maxTime)         setMaxTime(s.maxTime);
+      if (s.exclusions !== undefined) setExclusions(s.exclusions);
+      if (s.suggestionCount) setSuggestionCount(s.suggestionCount);
+      if (s.units)           setUnits(s.units);
+      setGistStatus({ ok:true, msg:`Hentet ${new Date().toLocaleTimeString("nb-NO")}` });
+    } catch (e) { setGistStatus({ ok:false, msg:`Feil: ${e.message}` }); }
+    setGistLoading(false);
   };
 
   const printPlan = () => {
@@ -1452,6 +1517,65 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   Gir reelle butikkpriser på oppskrifter.
                 </div>
               </div>
+            </div>
+
+            {/* Gist sync */}
+            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
+              padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                letterSpacing:"0.5px", fontWeight:600, marginBottom:16 }}>SKYSYNK — GITHUB GIST</div>
+
+              <div style={{ marginBottom:14 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>GitHub personal access token</label>
+                  <span style={{ fontSize:11, color: githubToken ? "#7abf7a" : "#747280", fontFamily:"sans-serif" }}>
+                    {githubToken ? "✓ Satt" : "Ikke satt"}
+                  </span>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input type="password" value={githubToken} onChange={e=>setGithubToken(e.target.value)}
+                    placeholder="ghp_..."
+                    style={{ flex:1, background:"#141517", border:"1px solid #2a2b30",
+                      borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"monospace", fontSize:12 }} />
+                  {githubToken && <button onClick={()=>{ setGithubToken(''); setGistId(''); setGistStatus(null); }}
+                    style={{ padding:"6px 12px", borderRadius:6, border:"1px solid #2a2b30",
+                      background:"transparent", color:"#747280", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>Fjern</button>}
+                </div>
+                <div style={{ marginTop:5, fontSize:11, color:"#4a4858", fontFamily:"sans-serif" }}>
+                  Generer token på{" "}
+                  <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer"
+                    style={{ color:"#e8a838" }}>github.com/settings/tokens</a>{" "}
+                  med kun <strong style={{ color:"#b4b2c2" }}>gist</strong>-tilgang. Lagres kun lokalt.
+                </div>
+              </div>
+
+              <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                <button onClick={pushToGist} disabled={gistLoading || !githubToken}
+                  style={{ padding:"8px 18px", borderRadius:7, border:"1px solid #2a4a2a",
+                    background: githubToken ? "#1a2e1a" : "transparent",
+                    color: githubToken ? "#7abf7a" : "#747280",
+                    cursor: githubToken ? "pointer" : "not-allowed", fontSize:13, fontFamily:"sans-serif" }}>
+                  {gistLoading ? "…" : "⬆ Push til sky"}
+                </button>
+                <button onClick={pullFromGist} disabled={gistLoading || !githubToken || !gistId}
+                  style={{ padding:"8px 18px", borderRadius:7, border:"1px solid #2a2b3a",
+                    background: (githubToken && gistId) ? "#1a1e2e" : "transparent",
+                    color: (githubToken && gistId) ? "#7a9abf" : "#747280",
+                    cursor: (githubToken && gistId) ? "pointer" : "not-allowed", fontSize:13, fontFamily:"sans-serif" }}>
+                  {gistLoading ? "…" : "⬇ Hent fra sky"}
+                </button>
+                {gistStatus && (
+                  <span style={{ fontSize:12, fontFamily:"sans-serif",
+                    color: gistStatus.ok ? "#7abf7a" : "#bf7a7a" }}>
+                    {gistStatus.ok ? "✓" : "✗"} {gistStatus.msg}
+                  </span>
+                )}
+              </div>
+              {gistId && (
+                <div style={{ marginTop:10, fontSize:11, color:"#4a4858", fontFamily:"sans-serif" }}>
+                  Gist ID: <span style={{ fontFamily:"monospace", color:"#747280" }}>{gistId}</span>
+                </div>
+              )}
             </div>
 
             {/* Defaults */}
