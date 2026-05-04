@@ -41,12 +41,13 @@ All keys use the `mp_` prefix.
 | `mp_lastShoppingKey` | string | planKey snapshot — used to detect when shopping list needs regeneration |
 | `mp_proteinTargets` | object | Per-protein weekly targets: `{fisk, kylling, kjott, vegeta}` |
 | `mp_cuisineTargets` | object | Per-cuisine weekly targets, keyed by cuisine key |
-| `mp_customCuisines` | array | User-added cuisine objects `{key, label, emoji, custom:true}` |
+| `mp_enabledCuisines` | array | Keys of cuisines active in the Kjøkken panel (subset of `CUISINE_LIBRARY`) |
 | `mp_weeks` | number | Active number of weeks (1–4) |
 | `mp_portions` | number | Portions per meal (1–20) |
 | `mp_maxTime` | number | Max prep time in minutes (15–120, step 15) |
 | `mp_exclusions` | string | Free-text ingredient/allergen exclusions |
 | `mp_suggestionCount` | number | Number of suggestions to generate (5–30, step 5) |
+| `mp_units` | string | Measurement system: `"metric"` (default) or `"imperial"` |
 
 ---
 
@@ -88,10 +89,10 @@ Three top-level views switched by `setView(...)`:
 - Meal history (`mp_mealHistory`, last 30 entries) — avoids long-term repetition
 
 ### Fetch recipe — `fetchRecipe(meal)`
-`POST /v1/messages` — returns `{ ingredients, steps, nutrition, pricePerPortion? }`. Called on card expand or plan modal open. Result cached in `mp_recipeCache`. If Kassal key is present, price is fetched from Kassal instead and the AI is told not to estimate.
+`POST /v1/messages` — returns `{ ingredients, steps, nutrition, pricePerPortion? }`. Called on card expand or plan modal open. Result cached in `mp_recipeCache`. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). If Kassal key is present, price is fetched from Kassal instead and the AI is told not to estimate.
 
 ### Generate shopping list — `generateShoppingList(force?)`
-`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}]}], totalPrice: {low, high} }`. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions.
+`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}]}], totalPrice: {low, high} }`. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system.
 
 ---
 
@@ -108,13 +109,15 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 | Export plan | Blob URL → `middagsplan-{date}.json`. Includes all plan state except API keys. |
 | Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
-| Print / share | `window.open('','_blank')` → `document.write(html)`. Clean printable page with weekly grid + shopping list. Includes a Print button for in-page printing. |
+| Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button for in-page printing. |
 
 ---
 
-## Custom cuisines
+## Cuisines
 
-User can add cuisines via the Kjøkken panel (emoji + name). Stored in `mp_customCuisines` as `{key, label, emoji, custom:true}`. Merged with `DEFAULT_CUISINES` at render time via `useMemo`. Removed with ✕ button — deletes from `customCuisines` and removes the key from `cuisineTargets`.
+`CUISINE_LIBRARY` contains 19 predefined cuisines (norsk, italiensk, asiatisk, meksikansk, indisk, japansk, kinesisk, thai, gresk, midtøsten, middelhavet, spansk, fransk, amerikansk, vietnamesisk, koreansk, tyrkisk, afrikansk/marokkansk, filippinsk). No free-text entry — all cuisines come from the library.
+
+`enabledCuisines` (localStorage array of keys, default: the first 5) controls which appear in the Kjøkken panel. Active cuisines show their CuisineCounter + ✕ to disable. Inactive cuisines appear as dashed + chips below the active list. Disabling a cuisine also removes its target from `cuisineTargets`. `allCuisines` is derived via `useMemo` filtering `CUISINE_LIBRARY` by `enabledCuisines`.
 
 ---
 
@@ -129,9 +132,20 @@ Every meal assigned to the plan (via click, select mode, or drag) is added to `m
 Sections:
 
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs, stored immediately in localStorage on change. Never included in plan exports.
-2. **Standardverdier** — weeks, portions, suggestion count, max time. These are the same state values used throughout the app; editing them here takes effect immediately.
+2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingList` immediately, since AI-generated amounts are baked into the cached text.
 3. **Mathistorikk** — scrollable list of recent meals, clear button.
 4. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
+
+---
+
+## Units
+
+`mp_units` — `"metric"` (default) or `"imperial"`. Toggled in Innstillinger → Standardverdier.
+
+- **Metric**: g, kg, dl, ml, liter
+- **Imperial**: oz, lbs, cups, fl oz, tbsp, tsp
+
+The active unit is injected as a sentence into the `fetchRecipe` and `generateShoppingList` prompts. Because amounts are stored as free text in `mp_recipeCache` (e.g. `"500g kylling"`), switching units calls `changeUnits()` which resets `recipeCache`, `shoppingList`, and `lastShoppingKey` — forcing fresh AI calls in the new system.
 
 ---
 

@@ -39,13 +39,28 @@ const PROTEINS = [
   { key:"vegeta",  label:"Vegetar",        emoji:"🥕", color:"#7abf7a", bg:"#141c14" },
 ];
 
-const DEFAULT_CUISINES = [
-  { key:"italiensk",  label:"Italiensk",     emoji:"🍝" },
-  { key:"asiatisk",   label:"Asiatisk",      emoji:"🍜" },
-  { key:"meksikansk", label:"Meksikansk",    emoji:"🌮" },
-  { key:"indisk",     label:"Indisk",        emoji:"🍛" },
-  { key:"norsk",      label:"Norsk/Nordisk", emoji:"🐟" },
+const CUISINE_LIBRARY = [
+  { key:"norsk",       label:"Norsk/Nordisk",  emoji:"🐟" },
+  { key:"italiensk",   label:"Italiensk",      emoji:"🍝" },
+  { key:"asiatisk",    label:"Asiatisk",       emoji:"🍜" },
+  { key:"meksikansk",  label:"Meksikansk",     emoji:"🌮" },
+  { key:"indisk",      label:"Indisk",         emoji:"🍛" },
+  { key:"japansk",     label:"Japansk",        emoji:"🍱" },
+  { key:"kinesisk",    label:"Kinesisk",       emoji:"🥢" },
+  { key:"thai",        label:"Thai",           emoji:"🌶️" },
+  { key:"gresk",       label:"Gresk",          emoji:"🫒" },
+  { key:"midtøsten",   label:"Midtøsten",      emoji:"🥙" },
+  { key:"middelhavet", label:"Middelhavet",    emoji:"🌊" },
+  { key:"spansk",      label:"Spansk",         emoji:"🥘" },
+  { key:"fransk",      label:"Fransk",         emoji:"🥐" },
+  { key:"amerikansk",  label:"Amerikansk",     emoji:"🍔" },
+  { key:"vietnamesisk",label:"Vietnamesisk",   emoji:"🍲" },
+  { key:"koreansk",    label:"Koreansk",       emoji:"🫕" },
+  { key:"tyrkisk",     label:"Tyrkisk",        emoji:"🧆" },
+  { key:"afrikansk",   label:"Afrikansk/Marokkansk", emoji:"🌍" },
+  { key:"filippinsk",  label:"Filippinsk",           emoji:"🍚" },
 ];
+const DEFAULT_ENABLED_CUISINES = ["norsk","italiensk","asiatisk","meksikansk","indisk"];
 
 const SYSTEM_PROMPT = `Du er en matplanlegger-assistent for en norsk familie som driver med meal prepping. ALLE middager du foreslår MÅ være:
 - Frysevennlig — egnet for å lage store porsjoner og fryse ned. Dette er ikke valgfritt.
@@ -87,9 +102,6 @@ function downloadFile(content, filename, mimeType) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function slugify(s) {
-  return s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_æøå]/g,'') + '_' + Date.now();
-}
 
 // ── Small components ───────────────────────────────────────────────────────
 function ProteinBadge({ protein }) {
@@ -150,10 +162,11 @@ function App() {
   // Config
   const [proteinTargets,  setProteinTargets]  = useState(() => lsGet('proteinTargets',  {fisk:2,kylling:1,kjott:1,vegeta:0}));
   const [cuisineTargets,  setCuisineTargets]  = useState(() => lsGet('cuisineTargets',  {}));
-  const [customCuisines,  setCustomCuisines]  = useState(() => lsGet('customCuisines',  []));
+  const [enabledCuisines, setEnabledCuisines] = useState(() => lsGet('enabledCuisines', DEFAULT_ENABLED_CUISINES));
   const [maxTime,         setMaxTime]         = useState(() => lsGet('maxTime', 60));
   const [exclusions,      setExclusions]      = useState(() => lsGet('exclusions', ''));
   const [suggestionCount, setSuggestionCount] = useState(() => lsGet('suggestionCount', 15));
+  const [units,           setUnits]           = useState(() => lsGet('units', 'metric'));
 
   // UI state
   const [view,          setView]          = useState('plan');
@@ -173,8 +186,6 @@ function App() {
   const [showFavourites,setShowFavourites]= useState(false);
   const [confirmClear,  setConfirmClear]  = useState(false);
   const [lastShoppingKey,setLastShoppingKey] = useState(() => lsGet('lastShoppingKey',''));
-  const [newCuisineName, setNewCuisineName]  = useState('');
-  const [newCuisineEmoji,setNewCuisineEmoji] = useState('🍽');
   const [notesDraft,    setNotesDraft]    = useState('');
 
   const importRef = useRef(null);
@@ -191,10 +202,11 @@ function App() {
   useEffect(() => lsSet('mealNotes',       mealNotes),       [mealNotes]);
   useEffect(() => lsSet('proteinTargets',  proteinTargets),  [proteinTargets]);
   useEffect(() => lsSet('cuisineTargets',  cuisineTargets),  [cuisineTargets]);
-  useEffect(() => lsSet('customCuisines',  customCuisines),  [customCuisines]);
+  useEffect(() => lsSet('enabledCuisines', enabledCuisines), [enabledCuisines]);
   useEffect(() => lsSet('maxTime',         maxTime),         [maxTime]);
   useEffect(() => lsSet('exclusions',      exclusions),      [exclusions]);
   useEffect(() => lsSet('suggestionCount', suggestionCount), [suggestionCount]);
+  useEffect(() => lsSet('units',           units),           [units]);
   useEffect(() => lsSet('recipeCache',     recipeCache),     [recipeCache]);
   useEffect(() => lsSet('shoppingList',    shoppingList),    [shoppingList]);
   useEffect(() => lsSet('lastShoppingKey', lastShoppingKey), [lastShoppingKey]);
@@ -205,7 +217,7 @@ function App() {
   }, [planModal?.meal?.name]);
 
   // ── Computed ─────────────────────────────────────────────────────────────
-  const allCuisines = useMemo(() => [...DEFAULT_CUISINES, ...customCuisines], [customCuisines]);
+  const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
   const totalTargeted = Object.values(proteinTargets).reduce((a,b)=>a+b, 0);
   const planKey = plan.slice(0,weeks).flat().map(m=>m?.name||'').join('|')+'|'+portions;
   const filledCount = plan.slice(0,weeks).flat().filter(Boolean).length;
@@ -273,28 +285,20 @@ function App() {
   );
   const isFavourite = (meal) => favourites.some(m=>m.name===meal.name);
 
-  // ── Custom cuisines ───────────────────────────────────────────────────────
-  const addCuisine = () => {
-    const name = newCuisineName.trim();
-    if (!name) return;
-    const key = slugify(name);
-    setCustomCuisines(prev => [...prev, { key, label:name, emoji:newCuisineEmoji, custom:true }]);
-    setCuisineTargets(prev => ({...prev, [key]:0}));
-    setNewCuisineName(''); setNewCuisineEmoji('🍽');
+  // ── Units ─────────────────────────────────────────────────────────────────
+  const changeUnits = (newUnits) => {
+    if (newUnits === units) return;
+    setUnits(newUnits);
+    setRecipeCache({});
+    setShoppingList(null);
+    setLastShoppingKey('');
   };
-  const removeCuisine = (key) => {
-    setCustomCuisines(prev => prev.filter(c=>c.key!==key));
+
+  // ── Cuisine enable/disable ────────────────────────────────────────────────
+  const enableCuisine = (key) => setEnabledCuisines(prev => prev.includes(key) ? prev : [...prev, key]);
+  const disableCuisine = (key) => {
+    setEnabledCuisines(prev => prev.filter(k => k !== key));
     setCuisineTargets(prev => { const n={...prev}; delete n[key]; return n; });
-  };
-  const removeDefaultCuisine = (key) => {
-    // We can't remove default cuisines from the array, but we can hide them
-    // by adding to a "hidden" list. Simpler: just treat target=0 as hidden for custom remove.
-    // Actually let's just allow flagging default cuisines as removed too.
-    setCustomCuisines(prev => {
-      // Store removal flag as a negative custom entry
-      if (prev.find(c=>c.key===key)) return prev;
-      return [...prev, { key, removed:true }];
-    });
   };
 
   // ── Kassal prices ─────────────────────────────────────────────────────────
@@ -338,7 +342,10 @@ function App() {
           system:"Du er en kokk-assistent. Bruk norsk bokmål. Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.",
           messages:[{
             role:"user",
-            content:`Gi oppskrift og næringsinnhold per porsjon for: ${meal.name}\n\n${kassalKey
+            content:`Gi oppskrift og næringsinnhold per porsjon for: ${meal.name}\n\n${units === 'imperial'
+              ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
+              : "Bruk metriske mål (gram, kg, dl, ml, liter)."
+            }\n${kassalKey
               ? "Ikke inkluder prisestimat, det hentes fra ekstern kilde."
               : "Inkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny)."
             }\nSvar med dette JSON-formatet:\n{\n  "ingredients": ["400g kyllingfileter", "2 bokser hermetiske tomater"],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 }${kassalKey ? "" : ',\n  "pricePerPortion": { "low": 45, "high": 65 }'}\n}`
@@ -454,7 +461,10 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Lag en handleliste for disse middagene. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. Inkluder totalt prisestimat basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
+            content:`Lag en handleliste for disse middagene. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
+              ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
+              : "Bruk metriske mål (gram, kg, dl, ml, liter)."
+            } Inkluder totalt prisestimat basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
           }]
         })
       });
@@ -470,7 +480,7 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
   // ── Export / import ───────────────────────────────────────────────────────
   const exportPlan = () => {
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
-      cuisineTargets, customCuisines, suggestionCount, favourites, mealNotes,
+      cuisineTargets, enabledCuisines, suggestionCount, units, favourites, mealNotes,
       mealHistory, exportedAt: new Date().toISOString() };
     const date = new Date().toISOString().split('T')[0];
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
@@ -490,7 +500,8 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
         if (d.maxTime) setMaxTime(d.maxTime);
         if (d.exclusions!==undefined) setExclusions(d.exclusions);
         if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
-        if (d.customCuisines) setCustomCuisines(d.customCuisines);
+        if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
+        if (d.units) setUnits(d.units);
         if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
         if (d.favourites) setFavourites(d.favourites);
         if (d.mealNotes) setMealNotes(d.mealNotes);
@@ -519,34 +530,50 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
     const rows = Array.from({length:weeks},(_,w) => {
       const cells = DAYS.map((d,di) => {
         const meal = plan[w][di];
-        return `<td style="border:1px solid #ddd;padding:8px 10px;font-size:12px;vertical-align:top;min-width:80px">${meal ? meal.emoji+" "+meal.name : "<span style='color:#bbb'>—</span>"}</td>`;
+        return `<td>${meal ? meal.emoji+" "+meal.name : "<span class='empty'>—</span>"}</td>`;
       }).join("");
-      return `<tr><td style="border:1px solid #ddd;padding:8px 10px;font-size:11px;color:#666;font-weight:600;white-space:nowrap">Uke ${w+1}</td>${cells}</tr>`;
+      return `<tr><td>Uke ${w+1}</td>${cells}</tr>`;
     }).join("");
 
     const shoppingHtml = shoppingList ? `
       <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste — ${portions} porsjoner per rett</h2>
-      ${shoppingList.totalPrice ? `<p style="font-size:12px;color:#666;margin-bottom:12px">Estimert totalpris: ca. ${shoppingList.totalPrice.low}–${shoppingList.totalPrice.high} kr</p>` : ""}
+      ${shoppingList.totalPrice ? `<p class="price">Estimert totalpris: ca. ${shoppingList.totalPrice.low}–${shoppingList.totalPrice.high} kr</p>` : ""}
       <div style="display:flex;flex-wrap:wrap;gap:16px">
-        ${shoppingList.categories.map(cat=>`<div style="min-width:180px">
-          <div style="font-weight:700;font-size:13px;margin-bottom:6px">${cat.emoji} ${cat.name}</div>
-          <ul style="margin:0;padding-left:16px;font-size:12px">${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
+        ${shoppingList.categories.map(cat=>`<div class="cat-box">
+          <div class="cat-title">${cat.emoji} ${cat.name}</div>
+          <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
         </div>`).join("")}
       </div>` : "";
 
     const html = `<!DOCTYPE html><html lang="nb"><head><meta charset="utf-8"><title>Middagsplan</title>
-      <style>body{font-family:sans-serif;padding:24px;max-width:1000px;margin:0 auto}@media print{body{padding:0}button{display:none}}</style>
+      <style>
+        body{font-family:sans-serif;padding:24px;max-width:1000px;margin:0 auto;background:#0e0f11;color:#e4ddd0}
+        h1,h2{color:#e4ddd0}
+        table{border-collapse:collapse;width:100%}
+        th,td{border:1px solid #2a2b30;padding:8px 10px;font-size:12px}
+        thead th{background:#18191c;color:#b4b2c2;font-size:11px}
+        tbody td{background:#141517;vertical-align:top;min-width:80px}
+        td:first-child{background:#18191c;color:#747280;font-size:11px;font-weight:600;white-space:nowrap}
+        .empty{color:#3a3b40}
+        .cat-title{font-weight:700;font-size:13px;margin-bottom:6px;color:#e8a838}
+        .cat-box{min-width:180px}
+        ul{margin:0;padding-left:16px;font-size:12px;color:#b4b2c2}
+        .meta{color:#747280;font-size:12px;margin-bottom:20px}
+        .price{font-size:12px;color:#747280;margin-bottom:12px}
+        .print-btn{padding:8px 20px;cursor:pointer;background:#22232a;border:1px solid #2a2b30;color:#e8a838;border-radius:6px;font-size:13px}
+        @media print{body{background:#fff;color:#111}th,td{border-color:#ccc}thead th{background:#f0f0f0;color:#333}tbody td{background:#fff}td:first-child{background:#f8f8f8;color:#555}.print-btn{display:none}}
+      </style>
       </head><body>
       <h1 style="font-size:20px;margin-bottom:4px">🥦 Hva skal vi ha til middag?</h1>
-      <p style="color:#666;font-size:12px;margin-bottom:20px">Generert ${new Date().toLocaleDateString("nb-NO")} · ${portions} porsjoner per rett</p>
-      <table style="border-collapse:collapse;width:100%">
-        <thead><tr><th style="border:1px solid #ddd;padding:8px 10px;font-size:11px;text-align:left"></th>
-          ${DAYS.map(d=>`<th style="border:1px solid #ddd;padding:8px 10px;font-size:11px">${d}</th>`).join("")}
+      <p class="meta">Generert ${new Date().toLocaleDateString("nb-NO")} · ${portions} porsjoner per rett</p>
+      <table>
+        <thead><tr><th style="text-align:left"></th>
+          ${DAYS.map(d=>`<th>${d}</th>`).join("")}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${shoppingHtml}
-      <p style="margin-top:32px"><button onclick="window.print()" style="padding:8px 20px;cursor:pointer">Skriv ut</button></p>
+      <p style="margin-top:32px"><button onclick="window.print()" class="print-btn">Skriv ut</button></p>
       </body></html>`;
 
     const win = window.open('','_blank');
@@ -712,36 +739,36 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                 KJØKKENMÅL PER UKE — veiledning for AI
               </div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:12 }}>
-                {allCuisines.filter(c=>!c.removed).map(cuisine => (
+                {allCuisines.map(cuisine => (
                   <div key={cuisine.key} style={{ position:"relative" }}>
                     <CuisineCounter cuisine={cuisine}
                       value={cuisineTargets[cuisine.key]||0}
                       onChange={v=>setCuisineTargets(prev=>({...prev,[cuisine.key]:v}))} />
-                    {cuisine.custom && (
-                      <button onClick={()=>removeCuisine(cuisine.key)} title="Fjern kjøkken"
-                        style={{ position:"absolute", top:-6, right:-6, width:18, height:18,
-                          background:"#2a1818", border:"1px solid #5a2a2a", borderRadius:"50%",
-                          color:"#d08080", cursor:"pointer", fontSize:10, display:"flex",
-                          alignItems:"center", justifyContent:"center", lineHeight:1 }}>✕</button>
-                    )}
+                    <button onClick={()=>disableCuisine(cuisine.key)} title="Fjern kjøkken"
+                      style={{ position:"absolute", top:-6, right:-6, width:18, height:18,
+                        background:"#2a1818", border:"1px solid #5a2a2a", borderRadius:"50%",
+                        color:"#d08080", cursor:"pointer", fontSize:10, display:"flex",
+                        alignItems:"center", justifyContent:"center", lineHeight:1 }}>✕</button>
                   </div>
                 ))}
               </div>
-              {/* Add custom cuisine */}
-              <div style={{ display:"flex", gap:8, alignItems:"center", borderTop:"1px solid #22232a", paddingTop:12 }}>
-                <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>Legg til:</span>
-                <input type="text" value={newCuisineEmoji} onChange={e=>setNewCuisineEmoji(e.target.value)}
-                  placeholder="🍽" maxLength={2} style={{ width:36, background:"#18191c", border:"1px solid #2a2b30",
-                    borderRadius:5, padding:"5px 6px", color:"#e4ddd0", fontSize:18, textAlign:"center" }} />
-                <input type="text" value={newCuisineName} onChange={e=>setNewCuisineName(e.target.value)}
-                  onKeyDown={e=>e.key==='Enter'&&addCuisine()}
-                  placeholder="Nytt kjøkken..."
-                  style={{ flex:1, background:"#18191c", border:"1px solid #2a2b30", borderRadius:5,
-                    padding:"6px 10px", color:"#e4ddd0", fontFamily:"sans-serif", fontSize:12 }} />
-                <button onClick={addCuisine} style={{ padding:"6px 14px", borderRadius:5,
-                  border:"none", background:"#22232a", color:"#e8a838", cursor:"pointer",
-                  fontSize:12, fontFamily:"sans-serif", fontWeight:600 }}>+ Legg til</button>
-              </div>
+              {/* Add from library */}
+              {CUISINE_LIBRARY.filter(c => !enabledCuisines.includes(c.key)).length > 0 && (
+                <div style={{ borderTop:"1px solid #22232a", paddingTop:10 }}>
+                  <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginBottom:6 }}>Legg til kjøkken:</div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {CUISINE_LIBRARY.filter(c => !enabledCuisines.includes(c.key)).map(c => (
+                      <button key={c.key} onClick={()=>enableCuisine(c.key)}
+                        style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 10px",
+                          borderRadius:6, border:"1px dashed #2a2b30", background:"transparent",
+                          color:"#b4b2c2", cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>
+                        <span>{c.emoji}</span><span>{c.label}</span>
+                        <span style={{ color:"#e8a838", fontWeight:700, fontSize:13 }}>+</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1308,6 +1335,24 @@ Mulige verdier for "protein": "fisk", "kylling", "kjott", "vegeta"`
                     <input type="range" min={15} max={120} step={15} value={maxTime}
                       onChange={e=>setMaxTime(Number(e.target.value))} style={{ width:90 }} />
                     <span style={{ fontSize:13, fontWeight:700, color:"#e8e0d0", fontFamily:"sans-serif", minWidth:50 }}>{maxTime} min</span>
+                  </div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div>
+                    <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Måleenhet</label>
+                    {units === 'imperial' && <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginTop:2 }}>Bytter enhet — oppskrifter og handleliste nullstilles</div>}
+                  </div>
+                  <div style={{ display:"flex", gap:4 }}>
+                    {[{key:"metric",label:"Metrisk",sub:"g / kg / dl"},{key:"imperial",label:"Imperialt",sub:"oz / lbs / cups"}].map(u => (
+                      <button key={u.key} onClick={()=>changeUnits(u.key)}
+                        style={{ padding:"6px 12px", borderRadius:6, cursor:"pointer", fontFamily:"sans-serif", textAlign:"center",
+                          border: units===u.key ? "2px solid #e8a838" : "1px solid #2a2b30",
+                          background: units===u.key ? "#22232a" : "transparent",
+                          color: units===u.key ? "#e8e0d0" : "#b4b2c2" }}>
+                        <div style={{ fontSize:12, fontWeight: units===u.key ? 600 : 400 }}>{u.label}</div>
+                        <div style={{ fontSize:10, color:"#747280", marginTop:1 }}>{u.sub}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
