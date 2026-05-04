@@ -1571,11 +1571,15 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   </span>
                 )}
               </div>
-              {gistId && (
-                <div style={{ marginTop:10, fontSize:11, color:"#4a4858", fontFamily:"sans-serif" }}>
-                  Gist ID: <span style={{ fontFamily:"monospace", color:"#747280" }}>{gistId}</span>
-                </div>
-              )}
+              <div style={{ marginTop:12 }}>
+                <label style={{ fontSize:11, color:"#4a4858", fontFamily:"sans-serif" }}>
+                  Gist ID{gistId ? " (auto-fylt etter push)" : " — lim inn fra en annen enhet for å hente plan"}
+                </label>
+                <input value={gistId} onChange={e=>setGistId(e.target.value.trim())}
+                  placeholder="abc123..."
+                  style={{ marginTop:4, width:"100%", background:"#141517", border:"1px solid #2a2b30",
+                    borderRadius:6, padding:"6px 10px", color:"#747280", fontFamily:"monospace", fontSize:11 }} />
+              </div>
             </div>
 
             {/* Defaults */}
