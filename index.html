@@ -205,6 +205,20 @@ function App() {
 
   const importRef = useRef(null);
 
+  // ── Browser back-button support ───────────────────────────────────────────
+  useEffect(() => {
+    history.replaceState({ view:'plan' }, '');
+  }, []);
+  useEffect(() => {
+    if (view !== 'plan') history.pushState({ view }, '');
+    else history.replaceState({ view:'plan' }, '');
+  }, [view]);
+  useEffect(() => {
+    const onPop = (e) => { setView(e.state?.view || 'plan'); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   // ── Persistence ──────────────────────────────────────────────────────────
   useEffect(() => lsSet('anthropicKey',    anthropicKey),    [anthropicKey]);
   useEffect(() => lsSet('kassalKey',       kassalKey),       [kassalKey]);
@@ -1492,7 +1506,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                 <button onClick={()=>importRef.current?.click()} style={{ padding:"8px 16px", borderRadius:7,
                   border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                   cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>⬆ Importer plan (.json)</button>
-                {shoppingList && (
+                {shoppingLists[shoppingWeek] && (
                   <button onClick={exportShoppingList} style={{ padding:"8px 16px", borderRadius:7,
                     border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                     cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>⬇ Eksporter handleliste (.txt)</button>
