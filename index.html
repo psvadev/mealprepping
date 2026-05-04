@@ -6,7 +6,6 @@
 <title>Hva skal vi ha til middag?</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scrollbar-gutter: stable; }
@@ -245,6 +244,17 @@ function App() {
     if (planModal) setNotesDraft(mealNotes[planModal.meal.name] || '');
   }, [planModal?.meal?.name]);
 
+  // Close modal on Escape
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || !planModal) return;
+      setMealNotes(prev => ({...prev, [planModal.meal.name]: notesDraft}));
+      setPlanModal(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [planModal, notesDraft]);
+
   // ── Computed ─────────────────────────────────────────────────────────────
   const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
   const totalTargeted = Object.values(proteinTargets).reduce((a,b)=>a+b, 0);
@@ -305,7 +315,8 @@ function App() {
   const clearPlan = () => {
     setPlan(Array.from({length:4},()=>Array(7).fill(null)));
     setSuggestions([]);
-    setShoppingList(null);
+    setShoppingLists({});
+    setLastShoppingKeys({});
     setConfirmClear(false);
   };
 
@@ -334,21 +345,26 @@ function App() {
   // ── Kassal prices ─────────────────────────────────────────────────────────
   const fetchKassalPrice = useCallback(async (ingredients) => {
     if (!kassalKey) return null;
-    const skip = ["salt","vann","pepper","krydder","olje","smør","hvitløk","sukker","mel"];
+    const skip = ["salt","vann","pepper","krydder","olje","smør","hvitløk","sukker","mel","saus","kraft"];
+    const adjectives = ["tørket","hermetiske","hermetisk","fersk","ferskpresset","hakket","malt","revet","skivet","kokt","rå","frossen","frosne"];
     const targets = ingredients.filter(i=>!skip.some(s=>i.toLowerCase().includes(s))).slice(0,4);
     let total=0, found=0;
     for (const ing of targets) {
-      const name = ing.replace(/^[\d.,\s]+(g|kg|dl|l|stk|ss|ts|pk|boks|bokser|pose|skive|skiver|fedd|cm)?\s*/i,"").trim();
-      if (!name || name.length<3) continue;
+      const stripped = ing.replace(/^[\d.,\s]+(g|kg|dl|l|stk|ss|ts|pk|boks|bokser|pose|skive|skiver|fedd|cm)?\s*/i,"").trim();
+      if (!stripped || stripped.length<3) continue;
+      // Take the first non-adjective word, strip any special characters
+      const words = stripped.split(/\s+/).map(w => w.replace(/[^a-zA-Z0-9æøåÆØÅ]/g,""));
+      const mainWord = words.find(w => w.length>=3 && !adjectives.includes(w.toLowerCase())) || words.find(w=>w.length>=3);
+      if (!mainWord) continue;
       try {
-        const r = await fetch(`https://kassal.app/api/v1/products?search=${encodeURIComponent(name)}&unique=true&size=3`,
+        const r = await fetch(`https://kassal.app/api/v1/products?search=${encodeURIComponent(mainWord)}&size=5`,
           { headers:{ Authorization:`Bearer ${kassalKey}` } });
         const d = await r.json();
         const prices = (d?.data||[]).map(p=>p.current_price).filter(Boolean);
         if (prices.length) { total+=Math.min(...prices); found++; }
       } catch {}
     }
-    if (found<2) return null;
+    if (found<1) return null;
     const base = total/portions;
     return { low:Math.round(base*0.85), high:Math.round(base*1.2), source:"kassal" };
   }, [kassalKey, portions]);
@@ -367,7 +383,7 @@ function App() {
           "anthropic-dangerous-direct-browser-access":"true"
         },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
+          model:"claude-sonnet-4-6",
           max_tokens:1500,
           system:"Du er en kokk-assistent. Bruk norsk bokmål. Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.",
           messages:[{
@@ -375,10 +391,7 @@ function App() {
             content:`Gi oppskrift og næringsinnhold per porsjon for: ${meal.name}\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
-            }\n${kassalKey
-              ? "Ikke inkluder prisestimat, det hentes fra ekstern kilde."
-              : "Inkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny)."
-            }\nSvar med dette JSON-formatet:\n{\n  "ingredients": ["400g kyllingfileter", "2 bokser hermetiske tomater"],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 }${kassalKey ? "" : ',\n  "pricePerPortion": { "low": 45, "high": 65 }'}\n}`
+            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\nSvar med dette JSON-formatet:\n{\n  "ingredients": ["400g kyllingfileter", "2 bokser hermetiske tomater"],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "pricePerPortion": { "low": 45, "high": 65 }\n}`
           }]
         })
       });
@@ -400,7 +413,6 @@ function App() {
     if (activeCell) { assignMeal(meal, activeCell.week, activeCell.day); return; }
     if (expandedCard===meal.name) { setExpandedCard(null); return; }
     setExpandedCard(meal.name);
-    fetchRecipe(meal);
   };
 
   // ── Generate suggestions ──────────────────────────────────────────────────
@@ -425,7 +437,7 @@ function App() {
           "anthropic-dangerous-direct-browser-access":"true"
         },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
+          model:"claude-sonnet-4-6",
           max_tokens: Math.max(3000, suggestionCount*weeks*220),
           system: SYSTEM_PROMPT,
           messages:[{
@@ -491,7 +503,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
           "anthropic-dangerous-direct-browser-access":"true"
         },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
+          model:"claude-sonnet-4-6",
           max_tokens:3000,
           system: SYSTEM_PROMPT,
           messages:[{
@@ -499,7 +511,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
             content:`Lag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
-            } Inkluder totalt prisestimat basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
+            } Inkluder prisestimat per kategori og totalt, basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "price": { "low": 120, "high": 160 },\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
           }]
         })
       });
@@ -557,7 +569,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     const date = new Date().toLocaleDateString("nb-NO");
     const header = `Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett\nGenerert ${date}\n\n`;
     const lines = sl.categories.map(cat =>
-      `${cat.emoji} ${cat.name}\n${cat.items.map(i=>`  - ${i.name}: ${i.amount}`).join("\n")}`
+      `${cat.emoji} ${cat.name}${cat.price ? ` (ca. ${cat.price.low}–${cat.price.high} kr)` : ""}\n${cat.items.map(i=>`  - ${i.name}: ${i.amount}`).join("\n")}`
     ).join("\n\n");
     const price = sl.totalPrice
       ? `\n\nEstimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr`
@@ -1317,7 +1329,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                         <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:10,
                           paddingBottom:8, borderBottom:"1px solid #22232a" }}>
                           <span style={{ fontSize:16 }}>{cat.emoji}</span>
-                          <span style={{ fontSize:12, fontWeight:700, color:"#ddd8ce", fontFamily:"sans-serif" }}>{cat.name}</span>
+                          <span style={{ fontSize:12, fontWeight:700, color:"#ddd8ce", fontFamily:"sans-serif", flex:1 }}>{cat.name}</span>
+                          {cat.price && <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>ca. {cat.price.low}–{cat.price.high} kr</span>}
                         </div>
                         <ul style={{ margin:0, padding:0, listStyle:"none" }}>
                           {cat.items.map((item,j) => (

@@ -47,7 +47,7 @@ Open `http://localhost:8080` in your browser, then go to **⚙ Innstillinger** a
 | Stack | React 18 + Babel Standalone via CDN — JSX transpiled in-browser |
 | State | All state in `localStorage` with `mp_` prefix — no backend |
 | AI | Anthropic API called directly from the browser (`anthropic-dangerous-direct-browser-access: true`) |
-| Model | `claude-sonnet-4-20250514` |
+| Model | `claude-sonnet-4-6` |
 | Prices | `kassal.app/api/v1/products` — optional, falls back to AI estimate |
 
 See [CLAUDE.md](CLAUDE.md) for full technical documentation.
