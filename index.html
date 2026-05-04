@@ -388,7 +388,7 @@ function App() {
           system:"Du er en kokk-assistent. Bruk norsk bokmål. Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.",
           messages:[{
             role:"user",
-            content:`Gi oppskrift og næringsinnhold per porsjon for: ${meal.name}\n\n${units === 'imperial'
+            content:`Gi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
             }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\nSvar med dette JSON-formatet:\n{\n  "ingredients": ["400g kyllingfileter", "2 bokser hermetiske tomater"],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "pricePerPortion": { "low": 45, "high": 65 }\n}`
@@ -407,7 +407,13 @@ function App() {
       }
     } catch {}
     setRecipeLoading(null);
-  }, [recipeCache, anthropicKey, kassalKey, fetchKassalPrice]);
+  }, [recipeCache, anthropicKey, kassalKey, fetchKassalPrice, portions, units]);
+
+  const fetchAllRecipes = async () => {
+    const meals = plan.slice(0,weeks).flat().filter(m => m && !m.leftover && !recipeCache[m.name]);
+    const unique = [...new Map(meals.map(m=>[m.name,m])).values()];
+    for (const meal of unique) await fetchRecipe(meal);
+  };
 
   const toggleCard = (meal) => {
     if (activeCell) { assignMeal(meal, activeCell.week, activeCell.day); return; }
@@ -970,6 +976,19 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
               </div>
             </div>
 
+            {/* Load all recipes button */}
+            {plan.slice(0,weeks).flat().some(m=>m&&!m.leftover&&!recipeCache[m.name]) && (
+              <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+                <button onClick={fetchAllRecipes} disabled={!!recipeLoading} style={{
+                  padding:"6px 14px", borderRadius:7, border:"1px solid #2a2b30",
+                  background:"transparent", color: recipeLoading ? "#747280" : "#b4b2c2",
+                  cursor: recipeLoading ? "default" : "pointer", fontSize:11, fontFamily:"sans-serif"
+                }}>
+                  {recipeLoading ? `Laster ${recipeLoading}...` : "Last alle oppskrifter"}
+                </button>
+              </div>
+            )}
+
             {/* Weekly nutrition summary */}
             {Array.from({length:weeks},(_,w)=>{
               const s = nutritionSummary[w];
@@ -979,7 +998,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   borderRadius:8, padding:"10px 14px" }}>
                   <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                     letterSpacing:"0.5px", fontWeight:600, marginBottom:8 }}>
-                    NÆRING — UKE {w+1} ({s.count} middager med oppskrift)
+                    NÆRING UKE {w+1} — 1 porsjon × {s.count} middager (ukestotal per person)
                   </div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {[
