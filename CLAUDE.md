@@ -69,10 +69,11 @@ Three top-level views switched by `setView(...)`:
 - **Drag and drop** — `draggable` on suggestion/favourite cards, `onDragOver`/`onDrop` on grid cells. When a meal is dropped on an occupied cell, the displaced meal returns to suggestions.
 - **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes saved to `mp_mealNotes` on modal close.
 - **Protein stats column** — rightmost grid column shows actual vs. target counts per protein type for each week.
-- **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache`; updates automatically as recipes load.
+- **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache` as 1 portion of each planned meal; updates automatically as recipes load. Label format: `NÆRING UKE N — 1 porsjon × M middager (ukestotal per person)`.
+- **Load all recipes button** — "Last alle oppskrifter" appears above the nutrition summary when uncached planned meals exist. Calls `fetchAllRecipes()` which iterates unique planned meals and fetches each sequentially.
 - **Progress bar** — filled days vs. total slots for active weeks.
 - **Favourites panel** — toggled via ★ button. Shows starred meals as draggable chips; clicking one adds it back to the suggestion list.
-- **Suggestion cards** — grid of AI-generated meals. Click to expand inline (full-width) showing ingredients, steps, nutrition. Collapse by clicking again. Drag to grid or click in select mode to assign.
+- **Suggestion cards** — grid of AI-generated meals. Click to expand inline (full-width) showing name, cuisine, protein type, and prep time. Recipe is **not** fetched on expand — only fetched when opened via plan modal. Drag to grid or click in select mode to assign.
 - **Filters** — filter suggestions by protein type. Applied client-side, no re-fetch.
 
 ---
@@ -89,16 +90,16 @@ Three top-level views switched by `setView(...)`:
 - Meal history (`mp_mealHistory`, last 30 entries) — avoids long-term repetition
 
 ### Fetch recipe — `fetchRecipe(meal)`
-`POST /v1/messages` — returns `{ ingredients, steps, nutrition, pricePerPortion? }`. Called on card expand or plan modal open. Result cached in `mp_recipeCache`. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). If Kassal key is present, price is fetched from Kassal instead and the AI is told not to estimate.
+`POST /v1/messages` — returns `{ ingredients, steps, nutrition, pricePerPortion? }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card expand** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz).
 
 ### Generate shopping list — `generateShoppingList(force?)`
-`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}]}], totalPrice: {low, high} }`. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system.
+`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system.
 
 ---
 
 ## Kassal price fetch — `fetchKassalPrice(ingredients)`
 
-Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amounts, searches `kassal.app/api/v1/products?search=...&unique=true&size=3`. Averages lowest prices found. Returns `{low, high, source:"kassal"}` if ≥2 ingredients matched, otherwise `null`. Attached to `recipe.pricePerPortion` after recipe fetch.
+Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amounts and adjectives, extracts the main noun word, searches `kassal.app/api/v1/products?search={word}&size=5`. Takes the minimum price found per ingredient, sums them, divides by `portions`. Returns `{low, high, source:"kassal"}` if ≥1 ingredient matched, otherwise `null`. Attached to `recipe.pricePerPortion` after recipe fetch, overriding the AI estimate.
 
 **Hobby plan limits** — the free Kassal API tier allows 60 req/min, no commercial use, no support. Each recipe fetch makes up to 4 Kassal requests (one per meaningful ingredient). In normal use this is not a concern — a user would need to expand ~15 recipe cards within a single minute to approach the limit, which is unlikely. No rate-limit handling is implemented; if the limit is hit, `fetchKassalPrice` will return `null` and the app falls back to the AI price estimate silently. If usage grows, the only mitigation needed would be reducing the ingredient cap below 4 or adding a short delay between searches.
 
