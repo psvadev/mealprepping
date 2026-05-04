@@ -599,6 +599,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
 
   const pushToGist = async () => {
     if (!githubToken) { setGistStatus({ ok:false, msg:'Legg inn GitHub-token først.' }); return; }
+    const hasAnyMeal = plan.slice(0, weeks).some(week => week.some(cell => cell !== null));
+    if (!hasAnyMeal && !window.confirm('Planen er tom — dette vil overskrive skylagringen med en tom plan. Fortsett?')) return;
     setGistLoading(true); setGistStatus(null);
     try {
       const body = { description:'Middagsplanner — skysynk', public:false,
