@@ -1,6 +1,8 @@
 # CLAUDE.md — mealprepping
 
-Browser-based meal planning tool for a Norwegian family doing weekly meal prep. Single self-contained `index.html` — React 18 + Babel via CDN, no build step, served with `python3 -m http.server 8080`.
+Browser-based weekly meal planner for a Norwegian family doing batch-cook meal prep. Single self-contained `index.html` — React 18 + Babel via CDN, no build step, served with `python3 -m http.server 8080`.
+
+**Meal prep philosophy:** everything is cooked on one batch day, frozen in portions, and dinner is reheating and eating only — no per-dinner prep whatsoever. All AI prompts (suggestions, recipes, shopping list) enforce this strictly.
 
 ---
 
@@ -66,7 +68,7 @@ Three top-level views switched by `setView(...)`:
 ## Plan view
 
 - **Weekly grid** — table of weeks × days. Cells show meal emoji + name + protein colour bar. Click empty cell to enter "select mode" (amber highlight); click meal card to assign. Drag meal cards directly onto cells.
-- **Drag and drop** — `draggable` on suggestion/favourite cards, `onDragOver`/`onDrop` on grid cells. When a meal is dropped on an occupied cell, the displaced meal returns to suggestions.
+- **Drag and drop** — `draggable` on suggestion/favourite cards and on meals already in the grid. `onDragOver`/`onDrop` on grid cells. A `dragSource` state (`{week,day}` or `null`) distinguishes the two cases: dragging from the grid to another grid cell **swaps** the two meals; dragging from suggestions/favourites onto an occupied cell displaces the existing meal back to suggestions.
 - **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes saved to `mp_mealNotes` on modal close.
 - **Protein stats column** — rightmost grid column shows actual vs. target counts per protein type for each week.
 - **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache` as 1 portion of each planned meal; updates automatically as recipes load. Label format: `NÆRING UKE N — 1 porsjon × M middager (ukestotal per person)`.
@@ -90,7 +92,7 @@ Three top-level views switched by `setView(...)`:
 - Meal history (`mp_mealHistory`, last 30 entries) — avoids long-term repetition
 
 ### Fetch recipe — `fetchRecipe(meal)`
-`POST /v1/messages` — returns `{ ingredients, steps, nutrition, pricePerPortion?, tips? }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card expand** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). Prompt explicitly requests 1–3 meal prep tips (`tips` array) — what to batch-cook, what freezes well, what to cook fresh (e.g. freeze pasta sauce, boil pasta fresh). Tips are displayed in the plan modal and in suggestion card expanded view when cached.
+`POST /v1/messages` — returns `{ components: [{name, ingredients[]}], steps, nutrition, pricePerPortion?, tips? }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card expand** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). Prompt explicitly requests 1–3 batch/freeze tips (`tips` array) — how to pack and freeze the dish, and the best reheating method (oven, microwave, pan). Tips must not suggest any per-dinner prep or fresh components. Tips are displayed in the plan modal and in suggestion card expanded view when cached. Old cached recipes with flat `ingredients[]` still render correctly via a backward-compatible fallback in the modal.
 
 ### Generate shopping list — `generateShoppingList(force?)`
 `POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system.
@@ -160,6 +162,8 @@ Text: primary `#e4ddd0`, secondary `#b4b2c2`, muted `#747280`.
 Font: `'Georgia', 'Times New Roman', serif` for headings/body; `sans-serif` for UI labels and data.
 All layout via inline styles — no CSS classes except global resets and scrollbar styling.
 Mobile friendly via `flexWrap` and `auto-fill` grid columns.
+`zoom: 1.1` on `body` — bakes in 110% browser zoom for comfortable reading at high-DPI resolutions.
+Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length.
 
 ---
 
