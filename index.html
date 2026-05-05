@@ -608,7 +608,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   const exportPlan = () => {
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
       cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, favourites, mealNotes,
-      mealHistory, exportedAt: new Date().toISOString() };
+      mealHistory, freezerItems, exportedAt: new Date().toISOString() };
     const date = new Date().toISOString().split('T')[0];
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
   };
@@ -634,6 +634,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         if (d.favourites) setFavourites(d.favourites);
         if (d.mealNotes) setMealNotes(d.mealNotes);
         if (d.mealHistory) setMealHistory(d.mealHistory);
+        if (d.freezerItems) setFreezerItems(d.freezerItems);
         setError(null);
       } catch { setError("Kunne ikke lese filen. Sjekk at det er en gyldig middagsplan-fil."); }
     };
@@ -1624,15 +1625,23 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                      {items.map(item => (
+                      {items.map(item => {
+                        const ageDays = Math.floor((Date.now() - new Date(item.cookedAt+'T12:00:00').getTime()) / 86400000);
+                        const isOld = ageDays >= 90;
+                        return (
                         <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10,
                           padding:"10px 14px", background:"#18191c", borderRadius:9,
-                          border:"1px solid #22232a", opacity: item.remaining===0 ? 0.4 : 1 }}>
+                          border:`1px solid ${isOld ? "#4a3a1a" : "#22232a"}`, opacity: item.remaining===0 ? 0.4 : 1 }}>
                           <span style={{ fontSize:22, flexShrink:0 }}>{item.emoji}</span>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:13, color:"#e4ddd0", fontWeight:600,
                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</div>
-                            <div style={{ marginTop:3 }}><ProteinBadge protein={item.protein} /></div>
+                            <div style={{ marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                              <ProteinBadge protein={item.protein} />
+                              {isOld && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
+                                border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
+                                fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays}d gammel</span>}
+                            </div>
                           </div>
                           {item.remaining === 0 ? (
                             <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif",
@@ -1656,7 +1665,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               background:"transparent", color:"#d47070", cursor:"pointer",
                               fontSize:14, fontFamily:"sans-serif", flexShrink:0 }}>✕</button>
                         </div>
-                      ))}
+                      ); })}
                     </div>
                   </div>
                 ))}
