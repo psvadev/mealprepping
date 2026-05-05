@@ -815,15 +815,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   ⚠ Totalt {totalTargeted} målsatte middager overstiger 7 dager — AI gjør sitt beste.
                 </div>
               )}
-              <div style={{ marginTop:12, borderTop:"1px solid #22232a", paddingTop:12 }}>
-                <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif", marginBottom:6, letterSpacing:"0.5px", fontWeight:600 }}>
-                  UTELAT INGREDIENSER / ALLERGENER
-                </div>
-                <input type="text" value={exclusions} onChange={e=>setExclusions(e.target.value)}
-                  placeholder="f.eks. nøtter, reker, gluten..."
-                  style={{ width:"100%", background:"#18191c", border:"1px solid #2a2b30", borderRadius:6,
-                    padding:"7px 10px", color:"#e4ddd0", fontFamily:"sans-serif", fontSize:12 }} />
-              </div>
             </div>
           )}
 
@@ -1462,6 +1453,26 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Exclusions */}
+            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
+              padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>ALLERGENER OG EKSKLUDERINGER</div>
+              <div style={{ fontSize:11, color:"#4a4858", fontFamily:"sans-serif", marginBottom:8 }}>
+                Ingredienser AI alltid skal unngå i forslag, oppskrifter og handleliste.
+              </div>
+              <input type="text" value={exclusions} onChange={e=>setExclusions(e.target.value)}
+                placeholder="f.eks. nøtter, reker, gluten..."
+                style={{ width:"100%", boxSizing:"border-box", background:"#141517", border:"1px solid #2a2b30",
+                  borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"sans-serif", fontSize:12 }} />
+              {exclusions.trim() && (
+                <button onClick={()=>setExclusions('')} style={{ marginTop:8, background:"transparent",
+                  border:"none", color:"#747280", cursor:"pointer", fontSize:11, fontFamily:"sans-serif", padding:0 }}>
+                  × Fjern alle ekskluderinger
+                </button>
+              )}
             </div>
 
             {/* Meal history */}
