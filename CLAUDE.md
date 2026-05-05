@@ -69,7 +69,7 @@ Three top-level views switched by `setView(...)`:
 
 ## Plan view
 
-- **Weekly grid** — table of weeks × days. Cells show meal emoji + name + protein colour bar. Click empty cell to enter "select mode" (amber highlight); click meal card to assign. Drag meal cards directly onto cells.
+- **Weekly grid** — table of weeks × days. Cells show meal emoji, name, and a `ProteinBadge` pill. Click empty cell to enter "select mode" (amber highlight); click meal card to assign. Drag meal cards directly onto cells. All cells in a row share equal height regardless of content.
 - **Drag and drop** — `draggable` on suggestion/favourite cards and on meals already in the grid. `onDragOver`/`onDrop` on grid cells. A `dragSource` state (`{week,day}` or `null`) distinguishes the two cases: dragging from the grid to another grid cell **swaps** the two meals; dragging from suggestions/favourites onto an occupied cell displaces the existing meal back to suggestions.
 - **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes saved to `mp_mealNotes` on modal close.
 - **Protein stats column** — rightmost grid column shows actual vs. target counts per protein type for each week.
@@ -165,7 +165,8 @@ Font: `'Georgia', 'Times New Roman', serif` for headings/body; `sans-serif` for 
 All layout via inline styles — no CSS classes except global resets and scrollbar styling.
 Mobile friendly via `flexWrap` and `auto-fill` grid columns.
 `zoom: 1.1` on `body` — bakes in 110% browser zoom for comfortable reading at high-DPI resolutions.
-Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length.
+Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length. `maxWidth` on the main container and header is 1400px (up from 1000px) to better utilise wide screens.
+Grid rows use equal-height cells: `<td>` has `height: "1px"` (table layout trick meaning "fill the row") and the inner div uses `height: "100%"` so all cells in a row stretch to match the tallest.
 
 ---
 
