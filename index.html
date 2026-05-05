@@ -902,7 +902,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       </th>
                     ))}
                     <th style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                      textAlign:"center", padding:"4px 6px", minWidth:70 }}>Protein</th>
+                      textAlign:"center", padding:"4px 4px", minWidth:40, width:40 }}>🎯</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -980,8 +980,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         );
                       })}
                       {/* Protein column */}
-                      <td style={{ padding:"2px 6px", verticalAlign:"middle" }}>
-                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                      <td style={{ padding:"2px 4px", verticalAlign:"middle", textAlign:"center", width:40 }}>
+                        <div style={{ display:"inline-flex", flexDirection:"column", gap:3, alignItems:"flex-start" }}>
                           {PROTEINS.filter(p=>proteinTargets[p.key]>0||proteinStats[w][p.key]>0).map(p => {
                             const actual=proteinStats[w][p.key]; const target=proteinTargets[p.key];
                             const met=target===0||actual>=target;
