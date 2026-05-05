@@ -635,7 +635,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
         <tbody>${rows}</tbody>
       </table>
       ${shoppingHtml}
-      <p style="margin-top:32px;display:flex;gap:10px"><button onclick="window.print()" class="print-btn">Skriv ut</button><button onclick="window.close()" class="print-btn" style="background:#3a1a1a;color:#c05040;border-color:#c05040">✕ Lukk</button></p>
+      <p style="margin-top:32px;display:flex;gap:10px"><button onclick="window.print()" class="print-btn">Skriv ut</button><button onclick="window.close()" class="print-btn" style="background:#3a1a1a;color:#e87060;border-color:#e87060">✕ Lukk</button></p>
       </body></html>`;
 
     const win = window.open('','_blank');
@@ -745,8 +745,6 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
               </button>
               <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger</button>
               <div style={{ width:1, background:"#2a2b30", margin:"4px 2px", alignSelf:"stretch" }} />
-              <button onClick={exportPlan} title="Last ned plan som JSON" style={btnIcon()}>⬇ Lagre</button>
-              <button onClick={()=>importRef.current?.click()} title="Last inn lagret plan" style={btnIcon()}>⬆ Last inn</button>
               <button onClick={printPlan} title="Skriv ut / del plan" style={btnIcon()}>🖨 Skriv ut</button>
               <button onClick={()=>setConfirmClear(true)} title="Tøm planen" style={{
                 ...btnIcon(), border:"1px solid #3a2a2a", color:"#907070"
