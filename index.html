@@ -511,7 +511,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
         headers:{ "Content-Type":"application/json", "x-api-key":anthropicKey,
           "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-6", max_tokens:1200, system:SYSTEM_PROMPT,
+          model:"claude-sonnet-4-6", max_tokens:2000, system:SYSTEM_PROMPT,
           messages:[{ role:"user", content:`Svar alltid på norsk bokmål.\n\nForeslå 5 middager med protein "${p.label}" for en norsk familie. Hver rett lages i ${portions} porsjoner. Alle retter skal ha forberedelsestid på MAKS ${maxTime} minutter.${exclusionLine}${avoidLine}${historyLine}
 Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Foretrekk gryter, supper, sauser og ovnsretter. Gi god variasjon i kjøkken og tilberedningsmetode.
 Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn",\n      "emoji": "🍲",\n      "prepTime": "30 min",\n      "freezer": true,\n      "protein": "${proteinKey}",\n      "category": "gryte",\n      "tags": [],\n      "description": "Kort beskrivelse på 1 setning"\n    }\n  ]\n}\nMulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat", "wrap", "klassisk".` }]
@@ -1118,7 +1118,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     }}>Alle</button>
                     {PROTEINS.map(p => {
                       const count = suggestions.filter(s=>s.protein===p.key).length;
-                      if (!count) return null;
+                      if (!count && filterProtein!==p.key && rerollLoading!==p.key) return null;
                       return (
                         <div key={p.key} style={{ display:"flex", alignItems:"center", gap:2 }}>
                           <button onClick={()=>{setFilterProtein(filterProtein===p.key?null:p.key);setFilterCategory(null);}} style={{
