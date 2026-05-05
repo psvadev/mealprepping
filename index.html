@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hva skal vi ha til middag?</title>
+<title>Reheat & Eat</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scrollbar-gutter: stable; }
-body { background: #0e0f11; color: #e4ddd0; font-family: 'Georgia', 'Times New Roman', serif; min-height: 100vh; }
+body { background: #0e0f11; color: #e4ddd0; font-family: 'Georgia', 'Times New Roman', serif; min-height: 100vh; zoom: 1.1; }
 input, textarea, select, button { font-family: inherit; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #141517; }
@@ -189,6 +189,7 @@ function App() {
   const [error,         setError]         = useState(null);
   const [activeCell,    setActiveCell]    = useState(null);
   const [dragMeal,      setDragMeal]      = useState(null);
+  const [dragSource,    setDragSource]    = useState(null);
   const [expandedCard,  setExpandedCard]  = useState(null);
   const [planModal,     setPlanModal]     = useState(null);
   const [recipeCache,   setRecipeCache]   = useState(() => lsGet('recipeCache', {}));
@@ -388,10 +389,10 @@ function App() {
           system:"Du er en kokk-assistent. Bruk norsk bokmål. Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.",
           messages:[{
             role:"user",
-            content:`Gi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
+            content:`Svar alltid på norsk bokmål.\n\nGi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
-            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en meal prep-app for frysevennlig matlaging. Inkluder 1–3 praktiske meal prep-tips under "tips": hva som kan lages i forveien, hva som egner seg å fryse ned, og hva som bør tilberedes ferskt rett før servering. Eksempel for pasta: frys sausen, kok pasta ferskt (tar bare 10 min). Vær spesifikk per rett.\nSvar med dette JSON-formatet:\n{\n  "ingredients": ["400g kyllingfileter", "2 bokser hermetiske tomater"],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Sausen kan lages 3–4 dager i forveien og fryses i porsjonsbokser.", "Kok pasta ferskt rett før servering — tar kun 10 min."]\n}`
+            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan retten best pakkes og fryses, og hvordan den varmes opp best (ovn, mikro, panne med litt vann osv.). Unngå tips om ferske sider, ingredienser som tilberedes ved servering, eller noe som lages "i forveien" – alt skjer på batch-dagen. Vær spesifikk per rett.\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Sausen kan lages 3–4 dager i forveien og fryses i porsjonsbokser.", "Kok pasta ferskt rett før servering — tar kun 10 min."]\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
           }]
         })
       });
@@ -399,8 +400,9 @@ function App() {
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed) {
-        if (kassalKey && parsed.ingredients) {
-          const kp = await fetchKassalPrice(parsed.ingredients);
+        const flatIngredients = parsed.components ? parsed.components.flatMap(c=>c.ingredients) : parsed.ingredients;
+        if (kassalKey && flatIngredients?.length) {
+          const kp = await fetchKassalPrice(flatIngredients);
           if (kp) parsed.pricePerPortion = kp;
         }
         setRecipeCache(prev => ({...prev, [meal.name]:parsed}));
@@ -448,11 +450,11 @@ function App() {
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Foreslå ${suggestionCount * weeks} middager for en norsk familie (${suggestionCount} per uke, ${weeks} uke${weeks>1?"r":""}). Hver rett lages i ${portions} porsjoner.
+            content:`Svar alltid på norsk bokmål.\n\nForeslå ${suggestionCount * weeks} middager for en norsk familie (${suggestionCount} per uke, ${weeks} uke${weeks>1?"r":""}). Hver rett lages i ${portions} porsjoner.
 Familien ønsker omtrent denne proteinfordelingen per uke (veiledende, ikke absolutt): ${targets}.
 Alle middager skal ha forberedelsestid på MAKS ${maxTime} minutter.${cuisineLine}${exclusionLine}${avoidLine}${historyLine}
+Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Hele retten lages ferdig på batch-dagen, inkludert grønnsaker og tilbehør. Foretrekk gryter, supper, sauser og ovnsretter der alt er integrert og smaker like godt etter frysing og oppvarming. Unngå retter som krever ferske komponenter ved servering.
 Gi god variasjon i kjøkken og tilberedningsmetode: norske klassikere, asiatisk inspirert, middelhavet, supper, ovnsretter osv. IKKE gjenta samme rett eller veldig like retter.
-Alle skal være meal-prep vennlig og frysevennlig.
 
 Svar med dette JSON-formatet:
 {
@@ -514,7 +516,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Lag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
+            content:`Svar alltid på norsk bokmål.\n\nLag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. ${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, ml, liter)."
             } Inkluder prisestimat per kategori og totalt, basert på norske butikkpriser.\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "price": { "low": 120, "high": 160 },\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
@@ -672,13 +674,13 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
 
           {/* Title row */}
           <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:2 }}>
-            <span style={{ fontSize:22 }}>🥦</span>
+            <span style={{ fontSize:22 }}>🧊</span>
             <h1 style={{ fontSize:19, fontWeight:700, letterSpacing:"-0.5px", margin:0, color:"#e8e0d0" }}>
-              Hva skal vi ha til middag?
+              Reheat & Eat
             </h1>
           </div>
           <p style={{ margin:0, fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
-            Meal-prep vennlig ukesplanlegger
+            Lag alt på én dag — frys ned — varm opp og spis
           </p>
 
           {/* Controls row */}
@@ -850,7 +852,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
           <>
             {/* Weekly grid */}
             <div style={{ overflowX:"auto", marginBottom:18 }}>
-              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"4px 4px" }}>
+              <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:"4px 4px", tableLayout:"fixed" }}>
                 <thead>
                   <tr>
                     <th style={{ width:54, fontSize:10, color:"#747280", fontFamily:"sans-serif",
@@ -888,13 +890,17 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                               onDragLeave={e=>{ e.currentTarget.style.borderColor=""; e.currentTarget.style.background=""; }}
                               onDrop={e=>{
                                 e.preventDefault(); e.currentTarget.style.borderColor=""; e.currentTarget.style.background="";
-                                if (dragMeal) {
-                                  const existing=plan[w][d];
+                                if (!dragMeal) return;
+                                const existing=plan[w][d];
+                                if (dragSource) {
+                                  if (dragSource.week===w && dragSource.day===d) { setDragMeal(null); setDragSource(null); return; }
+                                  setPlan(prev=>{ const next=prev.map(r=>[...r]); next[w][d]=dragMeal; next[dragSource.week][dragSource.day]=existing??null; return next; });
+                                } else {
                                   setPlan(prev=>{ const next=prev.map(r=>[...r]); next[w][d]=dragMeal; return next; });
                                   if (!dragMeal.leftover) setSuggestions(prev=>{ let next=prev.filter(m=>m.name!==dragMeal.name); if(existing&&!existing.leftover&&!next.find(m=>m.name===existing.name)) next=[...next,existing]; return next; });
                                   if (!dragMeal.leftover) addToHistory(dragMeal);
-                                  setDragMeal(null); setActiveCell(null);
                                 }
+                                setDragMeal(null); setDragSource(null); setActiveCell(null);
                               }}
                               style={{ minHeight:68, borderRadius:8,
                                 border: isActive ? "2px solid #e8a838" : meal ? `1px solid ${pColor||"#2a2b30"}55` : "1px dashed #22232a",
@@ -904,7 +910,11 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                 gap:2, transition:"border 0.1s, background 0.1s", position:"relative" }}
                             >
                               {meal ? (
-                                meal.leftover ? (
+                                <div draggable
+                                  onDragStart={e=>{ e.stopPropagation(); setDragMeal(meal); setDragSource({week:w,day:d}); e.dataTransfer.effectAllowed="move"; }}
+                                  onDragEnd={()=>{ setDragMeal(null); setDragSource(null); }}
+                                  style={{ cursor:"grab" }}>
+                                {meal.leftover ? (
                                   <>
                                     <span style={{ fontSize:16, opacity:0.5 }}>♻️</span>
                                     <span style={{ fontSize:9, color:"#747280", fontFamily:"sans-serif",
@@ -920,7 +930,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                     {hasNote && <span style={{ position:"absolute", top:4, right:4,
                                       fontSize:8, color:"#e8a838", opacity:0.8 }}>📝</span>}
                                   </>
-                                )
+                                )}
+                                </div>
                               ) : isActive ? (
                                 <span style={{ fontSize:16, opacity:0.6 }}>👆</span>
                               ) : (
@@ -1035,8 +1046,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {favourites.map((meal,i) => (
                       <div key={i} draggable
-                        onDragStart={e=>{setDragMeal(meal);e.dataTransfer.effectAllowed="move";}}
-                        onDragEnd={()=>setDragMeal(null)}
+                        onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
+                        onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
                         onClick={()=>{
                           if (activeCell) { assignMeal(meal,activeCell.week,activeCell.day); }
                           else { setSuggestions(prev=>prev.find(m=>m.name===meal.name)?prev:[meal,...prev]); setShowFavourites(false); }
@@ -1124,8 +1135,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
             {/* Rester chip — always draggable, clickable in select mode */}
             <div style={{ marginBottom:8 }}>
               <div draggable
-                onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);e.dataTransfer.effectAllowed="move";}}
-                onDragEnd={()=>setDragMeal(null)}
+                onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
+                onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
                 onClick={()=>{ if(activeCell) assignMeal(LEFTOVER_MEAL,activeCell.week,activeCell.day); }}
                 style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px",
                   borderRadius:8, border:"1px dashed #2a2b30", background:"transparent",
@@ -1149,8 +1160,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                   const isLoadingRecipe = recipeLoading===meal.name;
                   return (
                     <div key={i} draggable
-                      onDragStart={e=>{setDragMeal(meal);e.dataTransfer.effectAllowed="move";}}
-                      onDragEnd={()=>setDragMeal(null)}
+                      onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
+                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
                       onClick={()=>toggleCard(meal)}
                       onMouseEnter={e=>e.currentTarget.style.borderColor=activeCell?"#e8a838":"#2e2d38"}
                       onMouseLeave={e=>e.currentTarget.style.borderColor=isExpanded?"#aaa8b8":"#22232a"}
@@ -1203,14 +1214,31 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                 <div>
                                   <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
                                     letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>INGREDIENSER</div>
-                                  <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                                    {recipe.ingredients?.map((ing,j) => (
-                                      <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
-                                        padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
-                                        <span style={{ color:"#b4b2c2" }}>•</span>{ing}
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  {recipe.components ? recipe.components.map((comp,ci) => (
+                                    <div key={ci} style={{ marginBottom: ci < recipe.components.length-1 ? 10 : 0 }}>
+                                      {recipe.components.length > 1 && (
+                                        <div style={{ fontSize:9, color:"#e8a838", fontFamily:"sans-serif",
+                                          fontWeight:600, marginBottom:3, letterSpacing:"0.5px" }}>{comp.name}</div>
+                                      )}
+                                      <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                                        {comp.ingredients?.map((ing,j) => (
+                                          <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
+                                            padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
+                                            <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )) : (
+                                    <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                                      {recipe.ingredients?.map((ing,j) => (
+                                        <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
+                                          padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
+                                          <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </div>
                                 <div>
                                   <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
@@ -1654,14 +1682,31 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                     <div>
                       <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                         letterSpacing:"0.8px", marginBottom:10, fontWeight:600 }}>INGREDIENSER</div>
-                      <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                        {recipe.ingredients?.map((ing,j) => (
-                          <li key={j} style={{ fontSize:13, color:"#d4cdc4", fontFamily:"sans-serif",
-                            padding:"5px 0", borderBottom:"1px solid #22232a", display:"flex", gap:8 }}>
-                            <span style={{ color:"#e8a838", marginTop:2 }}>•</span>{ing}
-                          </li>
-                        ))}
-                      </ul>
+                      {recipe.components ? recipe.components.map((comp,ci) => (
+                        <div key={ci} style={{ marginBottom: ci < recipe.components.length-1 ? 12 : 0 }}>
+                          {recipe.components.length > 1 && (
+                            <div style={{ fontSize:10, color:"#e8a838", fontFamily:"sans-serif",
+                              fontWeight:600, marginBottom:4, letterSpacing:"0.5px" }}>{comp.name}</div>
+                          )}
+                          <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                            {comp.ingredients?.map((ing,j) => (
+                              <li key={j} style={{ fontSize:13, color:"#d4cdc4", fontFamily:"sans-serif",
+                                padding:"5px 0", borderBottom:"1px solid #22232a", display:"flex", gap:8 }}>
+                                <span style={{ color:"#e8a838", marginTop:2 }}>•</span>{ing}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )) : (
+                        <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                          {recipe.ingredients?.map((ing,j) => (
+                            <li key={j} style={{ fontSize:13, color:"#d4cdc4", fontFamily:"sans-serif",
+                              padding:"5px 0", borderBottom:"1px solid #22232a", display:"flex", gap:8 }}>
+                              <span style={{ color:"#e8a838", marginTop:2 }}>•</span>{ing}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
