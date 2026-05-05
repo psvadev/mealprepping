@@ -594,13 +594,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         })
       });
       const data = await res.json();
+      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||JSON.stringify(data)}`); setShoppingLoading(false); return; }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.categories) {
         setShoppingLists(prev=>({...prev,[week]:parsed}));
         setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
-      } else setError("Kunne ikke generere handleliste.");
-    } catch { setError("Nettverksfeil."); }
+      } else setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`);
+    } catch (err) { setError(`Nettverksfeil: ${err.message}`); }
     setShoppingLoading(false);
   };
 
