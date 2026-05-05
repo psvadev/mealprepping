@@ -1865,6 +1865,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   {DAYS[planModal.day]}, uke {planModal.week+1} · ⏱ {planModal.meal.prepTime} · {portions} porsjoner
                 </div>
               </div>
+              <button onClick={()=>toggleFavourite(planModal.meal)} style={{ background:"transparent",
+                border:"none", cursor:"pointer", fontSize:20, lineHeight:1, padding:4,
+                color:isFavourite(planModal.meal)?"#e8a838":"#44424e" }}
+                title={isFavourite(planModal.meal)?"Fjern fra favoritter":"Legg til favoritter"}>★</button>
               <button onClick={()=>{ saveNote(); setPlanModal(null); }} style={{ background:"transparent",
                 border:"none", color:"#747280", cursor:"pointer", fontSize:20, lineHeight:1, padding:4 }}>✕</button>
             </div>
