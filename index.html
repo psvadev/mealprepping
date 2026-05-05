@@ -354,6 +354,14 @@ function App() {
     setLastShoppingKeys({});
   };
 
+  const changePortions = (n) => {
+    if (n === portions) return;
+    setPortions(n);
+    setRecipeCache({});
+    setShoppingLists({});
+    setLastShoppingKeys({});
+  };
+
   // ── Cuisine enable/disable ────────────────────────────────────────────────
   const enableCuisine = (key) => setEnabledCuisines(prev => prev.includes(key) ? prev : [...prev, key]);
   const disableCuisine = (key) => {
@@ -750,7 +758,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {/* Porsjoner */}
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", letterSpacing:"0.5px" }}>PORSJONER</span>
-              <Stepper value={portions} min={1} max={20} onChange={setPortions} />
+              <Stepper value={portions} min={1} max={20} onChange={changePortions} />
               <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif" }}>per rett</span>
             </div>
 
@@ -1421,7 +1429,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 </div>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Porsjoner per rett</label>
-                  <Stepper value={portions} min={1} max={20} onChange={setPortions} />
+                  <Stepper value={portions} min={1} max={20} onChange={changePortions} />
                 </div>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                   <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Forslag per uke</label>
