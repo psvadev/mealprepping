@@ -52,17 +52,19 @@ All keys use the `mp_` prefix.
 | `mp_exclusions` | string | Free-text ingredient/allergen exclusions |
 | `mp_suggestionCount` | number | Number of suggestions to generate (5–30, step 5) |
 | `mp_units` | string | Measurement system: `"metric"` (default) or `"imperial"` |
+| `mp_freezerItems` | array | Freezer inventory — meals logged from the plan with portion tracking |
 
 ---
 
 ## Views
 
-Three top-level views switched by `setView(...)`:
+Four top-level views switched by `setView(...)`:
 
 | View | Description |
 |------|-------------|
 | `plan` | Main view — weekly grid, suggestions, favourites, nutrition summary |
 | `shopping` | Generated shopping list by category with total price estimate |
+| `fryser` | Freezer tracker — logged batch-cook weeks, portion countdown, age warnings |
 | `settings` | API keys, defaults, meal history, data import/export |
 
 ---
@@ -79,6 +81,32 @@ Three top-level views switched by `setView(...)`:
 - **Favourites panel** — toggled via ★ button. Shows starred meals as draggable chips; clicking one adds it back to the suggestion list.
 - **Suggestion cards** — grid of AI-generated meals. Click to expand inline (full-width) showing name, cuisine, protein type, and prep time. Recipe is **not** fetched on expand — only fetched when opened via plan modal. Drag to grid or click in select mode to assign.
 - **Filters** — filter suggestions by protein type. Applied client-side, no re-fetch.
+- **"→ Fryser" button** — appears in the week label cell when the week has at least one non-leftover meal. Calls `addWeekToFreezer(week)`, which logs all non-leftover meals for that week to `mp_freezerItems` with `remaining = total = portions` and `cookedAt = today`, then navigates to the Fryser view.
+- **"✕ Tøm" button** — clears the plan. Located beside the generate button in the suggestions panel (not in the nav bar).
+
+---
+
+## Fryser view
+
+Freezer inventory for tracking batch-cooked portions.
+
+**Data model** — each entry in `mp_freezerItems`:
+```js
+{ id, name, emoji, protein, remaining, total, cookedAt }
+// id: `${Date.now()}-${name}` — unique key
+// cookedAt: "YYYY-MM-DD" ISO string
+```
+
+**Layout:**
+- Header: "🧊 Fryser" + green badge showing total active portions remaining. Tab label also shows active count.
+- Items grouped by `cookedAt` date, most recent first. Date heading in Norwegian locale: `LAGET DD. MMMM YYYY`.
+- Each item row: emoji + name + `ProteinBadge` + `remaining/total` counter with **−** / **+** buttons + **✕** remove.
+- Depleted items (`remaining === 0`): 40% opacity, "Tomt" label replaces the −/+ controls.
+- Items ≥ 90 days old: amber `⚠ Nd gammel` badge shown next to the protein pill; card border shifts to amber tint (`#4a3a1a`).
+- "Tøm tomme" button (top-right) — removes all depleted items. Only shown when at least one item is depleted.
+- Empty state message with instructions to use "→ Fryser" in the plan view.
+
+**`addWeekToFreezer(week)`** — collects all non-null, non-leftover meals for the week, maps each to a freezer entry (`remaining = total = portions`), appends to `freezerItems`, then navigates to `"fryser"` view.
 
 ---
 
@@ -113,8 +141,8 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 
 | Action | Implementation |
 |--------|---------------|
-| Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `favourites`, `mealNotes`, `mealHistory`. Excludes: API keys (`mp_anthropicKey`, `mp_kassalKey`) and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
-| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. |
+| Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`. Excludes: API keys (`mp_anthropicKey`, `mp_kassalKey`) and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
+| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. `freezerItems` restored if present in the file. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
 | Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button for in-page printing. |
 
@@ -139,7 +167,7 @@ Every meal assigned to the plan (via click, select mode, or drag) is added to `m
 Sections:
 
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs, stored immediately in localStorage on change. Never included in plan exports.
-2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingList` immediately, since AI-generated amounts are baked into the cached text.
+2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingList` immediately, since AI-generated amounts are baked into the cached text. Changing portions calls `changePortions(n)` which also clears `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — so re-fetched recipes reflect the new count.
 3. **Mathistorikk** — scrollable list of recent meals, clear button.
 4. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
 
@@ -152,7 +180,7 @@ Sections:
 - **Metric**: g, kg, dl, ml, liter
 - **Imperial**: oz, lbs, cups, fl oz, tbsp, tsp
 
-The active unit is injected as a sentence into the `fetchRecipe` and `generateShoppingList` prompts. Because amounts are stored as free text in `mp_recipeCache` (e.g. `"500g kylling"`), switching units calls `changeUnits()` which resets `recipeCache`, `shoppingList`, and `lastShoppingKey` — forcing fresh AI calls in the new system.
+The active unit is injected as a sentence into the `fetchRecipe` and `generateShoppingList` prompts. Because amounts are stored as free text in `mp_recipeCache` (e.g. `"500g kylling"`), switching units calls `changeUnits()` which resets `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — forcing fresh AI calls in the new system. `changePortions(n)` does the same: ingredient amounts are scaled and baked into the cached text, so any portions change also clears those caches.
 
 ---
 
