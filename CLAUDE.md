@@ -113,8 +113,8 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 
 | Action | Implementation |
 |--------|---------------|
-| Export plan | Blob URL → `middagsplan-{date}.json`. Includes all plan state except API keys. |
-| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. |
+| Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `favourites`, `mealNotes`, `mealHistory`. Excludes: API keys (`mp_anthropicKey`, `mp_kassalKey`) and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
+| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
 | Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button for in-page printing. |
 
