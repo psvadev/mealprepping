@@ -192,7 +192,7 @@ function App() {
   const [activeCell,    setActiveCell]    = useState(null);
   const [dragMeal,      setDragMeal]      = useState(null);
   const [dragSource,    setDragSource]    = useState(null);
-  const [expandedCard,  setExpandedCard]  = useState(null);
+  const [suggestionModal, setSuggestionModal] = useState(null);
   const [planModal,     setPlanModal]     = useState(null);
   const [recipeCache,   setRecipeCache]   = useState(() => lsGet('recipeCache', {}));
   const [recipeLoading, setRecipeLoading] = useState(null);
@@ -421,8 +421,7 @@ function App() {
 
   const toggleCard = (meal) => {
     if (activeCell) { assignMeal(meal, activeCell.week, activeCell.day); return; }
-    if (expandedCard===meal.name) { setExpandedCard(null); return; }
-    setExpandedCard(meal.name);
+    setSuggestionModal(meal);
   };
 
   // ── Generate suggestions ──────────────────────────────────────────────────
@@ -1196,20 +1195,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {filteredSuggestions.length>0 && (
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:8 }}>
                 {filteredSuggestions.map((meal,i) => {
-                  const isExpanded = expandedCard===meal.name && !activeCell;
-                  const recipe = recipeCache[meal.name];
-                  const isLoadingRecipe = recipeLoading===meal.name;
                   return (
                     <div key={i} draggable
                       onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
                       onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
                       onClick={()=>toggleCard(meal)}
                       onMouseEnter={e=>e.currentTarget.style.borderColor=activeCell?"#e8a838":"#2e2d38"}
-                      onMouseLeave={e=>e.currentTarget.style.borderColor=isExpanded?"#aaa8b8":"#22232a"}
-                      style={{ background:"#18191c",
-                        border: isExpanded ? "1px solid #aaa8b8" : "1px solid #22232a",
+                      onMouseLeave={e=>e.currentTarget.style.borderColor="#22232a"}
+                      style={{ background:"#18191c", border:"1px solid #22232a",
                         borderRadius:10, padding:"12px 12px 10px", cursor:"grab",
-                        transition:"border 0.1s", gridColumn:isExpanded?"1 / -1":"auto",
+                        transition:"border 0.1s",
                         opacity:dragMeal?.name===meal.name?0.4:1,
                         display:"flex", flexDirection:"column" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
@@ -1219,7 +1214,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           background:"transparent", border:"none", cursor:"pointer", fontSize:15,
                           color:isFavourite(meal)?"#e8a838":"#44424e", padding:"0 2px"
                         }} title={isFavourite(meal)?"Fjern fra favoritter":"Legg til favoritter"}>★</button>
-                        {!activeCell && <span style={{ fontSize:10, color:"#747280" }}>{isExpanded?"▲":"▼"}</span>}
                       </div>
                       <p style={{ margin:"0 0 8px", fontSize:11, color:"#b4b2c2", lineHeight:1.5, fontFamily:"sans-serif", flex:1 }}>
                         {meal.description}
@@ -1235,117 +1229,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       </div>
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
                         fontFamily:"sans-serif", textAlign:"center", fontWeight:600 }}>Klikk for å velge →</div>}
-                      {!activeCell && !isExpanded && <div style={{ marginTop:6, fontSize:9,
-                        color:"#4a4858", fontFamily:"sans-serif", textAlign:"center" }}>dra til kalender</div>}
-
-                      {/* Expanded recipe */}
-                      {isExpanded && (
-                        <div style={{ marginTop:14, paddingTop:14, borderTop:"1px solid #22232a" }}
-                          onClick={e=>e.stopPropagation()}>
-                          {isLoadingRecipe && <div style={{ fontSize:12, color:"#a8a6b6", fontFamily:"sans-serif", padding:"12px 0" }}>Laster oppskrift...</div>}
-                          {!recipe && !isLoadingRecipe && (
-                            <button onClick={()=>fetchRecipe(meal)} style={{ padding:"6px 14px",
-                              borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
-                              color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
-                              Last inn oppskrift
-                            </button>
-                          )}
-                          {recipe && (
-                            <>
-                              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 }}>
-                                <div>
-                                  <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
-                                    letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>INGREDIENSER</div>
-                                  {recipe.components ? recipe.components.map((comp,ci) => (
-                                    <div key={ci} style={{ marginBottom: ci < recipe.components.length-1 ? 10 : 0 }}>
-                                      {recipe.components.length > 1 && (
-                                        <div style={{ fontSize:9, color:"#e8a838", fontFamily:"sans-serif",
-                                          fontWeight:600, marginBottom:3, letterSpacing:"0.5px" }}>{comp.name}</div>
-                                      )}
-                                      <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                                        {comp.ingredients?.map((ing,j) => (
-                                          <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
-                                            padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
-                                            <span style={{ color:"#b4b2c2" }}>•</span>{ing}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )) : (
-                                    <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                                      {recipe.ingredients?.map((ing,j) => (
-                                        <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
-                                          padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
-                                          <span style={{ color:"#b4b2c2" }}>•</span>{ing}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                                <div>
-                                  <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
-                                    letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>FREMGANGSMÅTE</div>
-                                  <ol style={{ margin:0, padding:0, listStyle:"none" }}>
-                                    {recipe.steps?.map((step,j) => (
-                                      <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
-                                        padding:"4px 0", borderBottom:"1px solid #141517", display:"flex", gap:8 }}>
-                                        <span style={{ color:"#e8a838", fontWeight:700, minWidth:16 }}>{j+1}.</span>{step}
-                                      </li>
-                                    ))}
-                                  </ol>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
-                                    letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>NÆRING PER PORSJON</div>
-                                  {recipe.nutrition && (
-                                    <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                                      {[
-                                        {label:"Kalorier",      val:`${recipe.nutrition.calories} kcal`, color:"#d4a84a"},
-                                        {label:"Protein",       val:`${recipe.nutrition.protein}g`,      color:"#4a8aaa"},
-                                        {label:"Fett",          val:`${recipe.nutrition.fat}g`,          color:"#aa6a4a"},
-                                        {label:"Karbohydrater", val:`${recipe.nutrition.carbs}g`,        color:"#8a6aaa"},
-                                        {label:"Fiber",         val:`${recipe.nutrition.fiber}g`,        color:"#7abf7a"},
-                                      ].map(n => (
-                                        <div key={n.label} style={{ display:"flex", justifyContent:"space-between",
-                                          alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
-                                          <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>{n.label}</span>
-                                          <span style={{ fontSize:12, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
-                                        </div>
-                                      ))}
-                                      {recipe.pricePerPortion && (
-                                        <div style={{ display:"flex", justifyContent:"space-between",
-                                          alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
-                                          <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Pris/porsjon</span>
-                                          <span style={{ fontSize:11, fontWeight:700, color:"#a8c4a8", fontFamily:"sans-serif" }}>
-                                            ca. {recipe.pricePerPortion.low}–{recipe.pricePerPortion.high} kr
-                                            <span style={{ fontSize:9, color:"#747280", marginLeft:4 }}>
-                                              {recipe.pricePerPortion.source==="kassal" ? "kassal.app" : "estimat"}
-                                            </span>
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              {recipe.tips?.length > 0 && (
-                                <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid #22232a" }}>
-                                  <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
-                                    letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>MEAL PREP-TIPS</div>
-                                  <ul style={{ margin:0, padding:0, listStyle:"none", display:"flex", flexDirection:"column", gap:6 }}>
-                                    {recipe.tips.map((tip, i) => (
-                                      <li key={i} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                                        <span style={{ fontSize:13, flexShrink:0 }}>💡</span>
-                                        <span style={{ fontSize:12, color:"#c8c0d0", fontFamily:"sans-serif", lineHeight:1.5 }}>{tip}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1669,6 +1552,155 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 background:"#5a2020", color:"#f0c0c0", cursor:"pointer", fontSize:13,
                 fontFamily:"sans-serif", fontWeight:700 }}>Ja, tøm planen</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUGGESTION PREVIEW MODAL ── */}
+      {suggestionModal && (
+        <div onClick={()=>setSuggestionModal(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.78)", zIndex:200,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{ background:"#18191c", borderRadius:14, padding:24, maxWidth:780, width:"100%",
+              maxHeight:"85vh", overflowY:"auto", border:"1px solid #2a2b30", position:"relative" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:14 }}>
+              <span style={{ fontSize:32 }}>{suggestionModal.emoji}</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:16, fontWeight:700, color:"#e4ddd0", marginBottom:6 }}>{suggestionModal.name}</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:11, padding:"2px 8px", background:"#141517",
+                    borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>⏱ {suggestionModal.prepTime}</span>
+                  <ProteinBadge protein={suggestionModal.protein} />
+                  {suggestionModal.category && (() => { const cat=MEAL_CATEGORIES.find(c=>c.key===suggestionModal.category); return cat ? (
+                    <span style={{ fontSize:11, padding:"2px 8px", background:"#141517",
+                      borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>{cat.emoji} {cat.label}</span>
+                  ) : null; })()}
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                <button onClick={e=>{e.stopPropagation();toggleFavourite(suggestionModal);}} style={{
+                  background:"transparent", border:"1px solid #2a2b30", borderRadius:7,
+                  cursor:"pointer", fontSize:16, color:isFavourite(suggestionModal)?"#e8a838":"#44424e",
+                  padding:"4px 10px"
+                }} title={isFavourite(suggestionModal)?"Fjern fra favoritter":"Legg til favoritter"}>★</button>
+                <button onClick={()=>setSuggestionModal(null)} style={{
+                  background:"transparent", border:"1px solid #2a2b30", borderRadius:7,
+                  cursor:"pointer", fontSize:14, color:"#747280", padding:"4px 10px", fontFamily:"sans-serif"
+                }}>✕</button>
+              </div>
+            </div>
+            <p style={{ margin:"0 0 16px", fontSize:12, color:"#b4b2c2", lineHeight:1.6, fontFamily:"sans-serif" }}>
+              {suggestionModal.description}
+            </p>
+            {/* Recipe */}
+            {(() => {
+              const recipe = recipeCache[suggestionModal.name];
+              const isLoadingRecipe = recipeLoading===suggestionModal.name;
+              if (isLoadingRecipe) return <div style={{ fontSize:12, color:"#a8a6b6", fontFamily:"sans-serif", padding:"20px 0", textAlign:"center" }}>Laster oppskrift...</div>;
+              if (!recipe) return (
+                <button onClick={()=>fetchRecipe(suggestionModal)} style={{ padding:"8px 18px",
+                  borderRadius:7, border:"1px solid #2a2b30", background:"transparent",
+                  color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                  Last inn oppskrift
+                </button>
+              );
+              return (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:14 }}>
+                    <div>
+                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>INGREDIENSER</div>
+                      {recipe.components ? recipe.components.map((comp,ci) => (
+                        <div key={ci} style={{ marginBottom: ci < recipe.components.length-1 ? 10 : 0 }}>
+                          {recipe.components.length > 1 && (
+                            <div style={{ fontSize:9, color:"#e8a838", fontFamily:"sans-serif",
+                              fontWeight:600, marginBottom:3, letterSpacing:"0.5px" }}>{comp.name}</div>
+                          )}
+                          <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                            {comp.ingredients?.map((ing,j) => (
+                              <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
+                                padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
+                                <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )) : (
+                        <ul style={{ margin:0, padding:0, listStyle:"none" }}>
+                          {recipe.ingredients?.map((ing,j) => (
+                            <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
+                              padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
+                              <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>FREMGANGSMÅTE</div>
+                      <ol style={{ margin:0, padding:0, listStyle:"none" }}>
+                        {recipe.steps?.map((step,j) => (
+                          <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
+                            padding:"4px 0", borderBottom:"1px solid #141517", display:"flex", gap:8 }}>
+                            <span style={{ color:"#e8a838", fontWeight:700, minWidth:16 }}>{j+1}.</span>{step}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>NÆRING PER PORSJON</div>
+                      {recipe.nutrition && (
+                        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                          {[
+                            {label:"Kalorier",      val:`${recipe.nutrition.calories} kcal`, color:"#d4a84a"},
+                            {label:"Protein",       val:`${recipe.nutrition.protein}g`,      color:"#4a8aaa"},
+                            {label:"Fett",          val:`${recipe.nutrition.fat}g`,          color:"#aa6a4a"},
+                            {label:"Karbohydrater", val:`${recipe.nutrition.carbs}g`,        color:"#8a6aaa"},
+                            {label:"Fiber",         val:`${recipe.nutrition.fiber}g`,        color:"#7abf7a"},
+                          ].map(n => (
+                            <div key={n.label} style={{ display:"flex", justifyContent:"space-between",
+                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
+                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>{n.label}</span>
+                              <span style={{ fontSize:12, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
+                            </div>
+                          ))}
+                          {recipe.pricePerPortion && (
+                            <div style={{ display:"flex", justifyContent:"space-between",
+                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
+                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Pris/porsjon</span>
+                              <span style={{ fontSize:11, fontWeight:700, color:"#a8c4a8", fontFamily:"sans-serif" }}>
+                                ca. {recipe.pricePerPortion.low}–{recipe.pricePerPortion.high} kr
+                                <span style={{ fontSize:9, color:"#747280", marginLeft:4 }}>
+                                  {recipe.pricePerPortion.source==="kassal" ? "kassal.app" : "estimat"}
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {recipe.tips?.length > 0 && (
+                    <div style={{ paddingTop:12, borderTop:"1px solid #22232a" }}>
+                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>MEAL PREP-TIPS</div>
+                      <ul style={{ margin:0, padding:0, listStyle:"none", display:"flex", flexDirection:"column", gap:6 }}>
+                        {recipe.tips.map((tip,i) => (
+                          <li key={i} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                            <span style={{ fontSize:13, flexShrink:0 }}>💡</span>
+                            <span style={{ fontSize:12, color:"#c8c0d0", fontFamily:"sans-serif", lineHeight:1.5 }}>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
