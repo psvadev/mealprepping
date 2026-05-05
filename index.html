@@ -122,7 +122,7 @@ function ProteinBadge({ protein }) {
   const p = PROTEINS.find(x => x.key === protein);
   if (!p) return null;
   return (
-    <span style={{ fontSize:10, padding:"2px 7px", background:p.bg, borderRadius:10,
+    <span style={{ fontSize:11, padding:"3px 8px", background:p.bg, borderRadius:10,
       color:p.color, fontFamily:"sans-serif", border:`1px solid ${p.color}44` }}>
       {p.emoji} {p.label}
     </span>
@@ -1225,7 +1225,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
                         <ProteinBadge protein={meal.protein} />
                         {meal.category && (() => { const cat=MEAL_CATEGORIES.find(c=>c.key===meal.category); return cat ? (
-                          <span style={{ fontSize:10, padding:"2px 6px", background:"#141517",
+                          <span style={{ fontSize:11, padding:"3px 8px", background:"#141517",
                             borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>{cat.emoji} {cat.label}</span>
                         ) : null; })()}
                       </div>
