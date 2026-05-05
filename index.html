@@ -1126,11 +1126,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                             background: filterProtein===p.key ? p.bg : "transparent",
                             color: filterProtein===p.key ? p.color : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
                           }}>{p.emoji} {p.label} ({count})</button>
-                          <button onClick={()=>rerollProtein(p.key)} disabled={!!rerollLoading} title={`Hent 5 nye ${p.label}-forslag`} style={{
+                          {filterProtein===p.key && <button onClick={()=>rerollProtein(p.key)} disabled={!!rerollLoading} title={`Hent 5 nye ${p.label}-forslag`} style={{
                             fontSize:11, padding:"2px 6px", borderRadius:10, border:`1px solid #2a2b30`,
                             background:"transparent", color: rerollLoading===p.key ? p.color : "#747280",
                             cursor: rerollLoading ? "not-allowed" : "pointer", fontFamily:"sans-serif", lineHeight:1
-                          }}>{rerollLoading===p.key ? "…" : "🔄"}</button>
+                          }}>{rerollLoading===p.key ? "…" : "🔄"}</button>}
                         </div>
                       );
                     })}
