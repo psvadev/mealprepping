@@ -878,7 +878,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                         const pColor = meal?.leftover ? null : meal?.protein ? PROTEINS.find(p=>p.key===meal.protein)?.color : null;
                         const hasNote = meal && !meal.leftover && mealNotes[meal.name];
                         return (
-                          <td key={d} style={{ padding:2 }}>
+                          <td key={d} style={{ padding:2, verticalAlign:"stretch", height:"1px" }}>
                             <div
                               onClick={() => {
                                 if (meal) {
@@ -902,7 +902,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                 }
                                 setDragMeal(null); setDragSource(null); setActiveCell(null);
                               }}
-                              style={{ minHeight:90, borderRadius:8,
+                              style={{ minHeight:90, height:"100%", boxSizing:"border-box", borderRadius:8,
                                 border: isActive ? "2px solid #e8a838" : meal ? `1px solid ${pColor||"#2a2b30"}55` : "1px dashed #22232a",
                                 background: meal ? "#1c1d21" : isActive ? "#141517" : "transparent",
                                 cursor:"pointer", padding:"9px 6px",
@@ -925,7 +925,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                     <span style={{ fontSize:20 }}>{meal.emoji}</span>
                                     <span style={{ fontSize:11, color:"#ddd8ce", fontFamily:"sans-serif",
                                       textAlign:"center", lineHeight:1.3, fontWeight:500 }}>{meal.name}</span>
-                                    {meal.protein && <div style={{ marginTop:4 }}><ProteinBadge protein={meal.protein} /></div>}
+                                    {meal.protein && <div style={{ marginTop:8 }}><ProteinBadge protein={meal.protein} /></div>}
                                     {hasNote && <span style={{ position:"absolute", top:4, right:4,
                                       fontSize:8, color:"#e8a838", opacity:0.8 }}>📝</span>}
                                   </>
