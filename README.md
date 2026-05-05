@@ -36,6 +36,8 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 
 ## Running locally
 
+Requires [Python 3](https://www.python.org/downloads/) — free and available from the [Microsoft Store](https://apps.microsoft.com/detail/9NRWMJP3717K) on Windows.
+
 ```bash
 python3 -m http.server 8080
 ```
