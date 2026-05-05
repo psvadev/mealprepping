@@ -117,11 +117,11 @@ function downloadFile(content, filename, mimeType) {
 }
 
 const NUTRITION_FIELDS = [
-  { key:"calories", label:"Kalorier",      short:"Kalorier", unit:" kcal", color:"#d4a84a" },
-  { key:"protein",  label:"Protein",       short:"Protein",  unit:"g",     color:"#4a8aaa" },
-  { key:"fat",      label:"Fett",          short:"Fett",     unit:"g",     color:"#aa6a4a" },
-  { key:"carbs",    label:"Karbohydrater", short:"Karbo",    unit:"g",     color:"#8a6aaa" },
-  { key:"fiber",    label:"Fiber",         short:"Fiber",    unit:"g",     color:"#7abf7a" },
+  { key:"calories", label:"Kalorier",      unit:" kcal", color:"#d4a84a" },
+  { key:"protein",  label:"Protein",       unit:"g",     color:"#4a8aaa" },
+  { key:"fat",      label:"Fett",          unit:"g",     color:"#aa6a4a" },
+  { key:"carbs",    label:"Karbohydrater", unit:"g",     color:"#8a6aaa" },
+  { key:"fiber",    label:"Fiber",         unit:"g",     color:"#7abf7a" },
 ];
 
 // ── Small components ───────────────────────────────────────────────────────
@@ -1054,7 +1054,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     <span style={{ fontWeight:400, letterSpacing:0 }}>1 porsjon × {s.count} middager</span>
                   </div>
                   <div style={{ width:"1px", height:36, background:"#2a2b30", flexShrink:0 }} />
-                  {NUTRITION_FIELDS.map(f => ({label:f.short, val:`${s[f.key]}${f.unit}`, color:f.color})).map(n => (
+                  {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${s[f.key]}${f.unit}`, color:f.color})).map(n => (
                     <div key={n.label} style={{ flex:"1 1 80px", display:"flex", flexDirection:"column",
                       alignItems:"center", padding:"6px 8px", background:"#18191c", borderRadius:7, gap:2 }}>
                       <span style={{ fontSize:14, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
