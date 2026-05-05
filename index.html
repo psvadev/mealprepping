@@ -665,16 +665,19 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       return `<tr><td>Uke ${w+1}</td>${cells}</tr>`;
     }).join("");
 
-    const sl = shoppingLists[shoppingWeek];
-    const shoppingHtml = sl ? `
-      <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett</h2>
-      ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr</p>` : ""}
-      <div style="column-count:3;column-gap:24px">
-        ${sl.categories.map(cat=>`<div class="cat-box" style="break-inside:avoid;margin-bottom:20px">
-          <div class="cat-title">${cat.emoji} ${cat.name}</div>
-          <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
-        </div>`).join("")}
-      </div>` : "";
+    const shoppingHtml = Array.from({length:weeks},(_,w) => {
+      const sl = shoppingLists[w];
+      if (!sl) return "";
+      return `
+        <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${w+1} — ${portions} porsjoner per rett</h2>
+        ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr</p>` : ""}
+        <div style="column-count:3;column-gap:24px">
+          ${sl.categories.map(cat=>`<div class="cat-box" style="break-inside:avoid;margin-bottom:20px">
+            <div class="cat-title">${cat.emoji} ${cat.name}</div>
+            <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
+          </div>`).join("")}
+        </div>`;
+    }).join("");
 
     const html = `<!DOCTYPE html><html lang="nb"><head><meta charset="utf-8"><title>Middagsplan</title>
       <style>
