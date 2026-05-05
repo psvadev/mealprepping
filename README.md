@@ -4,6 +4,8 @@ A browser-based weekly meal planner for a Norwegian family doing batch-cook meal
 
 The philosophy: cook everything on one batch day, freeze in portions, and dinner is just reheating and eating. No per-dinner prep whatsoever.
 
+> **Language note:** The UI, all AI prompts, and all generated content (recipes, suggestions, shopping lists) are in Norwegian bokmål. The codebase is in English.
+
 ---
 
 ## Features
