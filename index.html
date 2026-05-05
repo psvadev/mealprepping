@@ -600,8 +600,8 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     const shoppingHtml = sl ? `
       <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett</h2>
       ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr</p>` : ""}
-      <div style="display:flex;flex-wrap:wrap;gap:16px">
-        ${sl.categories.map(cat=>`<div class="cat-box">
+      <div style="column-count:3;column-gap:24px">
+        ${sl.categories.map(cat=>`<div class="cat-box" style="break-inside:avoid;margin-bottom:20px">
           <div class="cat-title">${cat.emoji} ${cat.name}</div>
           <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
         </div>`).join("")}
