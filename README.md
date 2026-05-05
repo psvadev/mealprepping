@@ -22,6 +22,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Cuisine library** — 19 predefined cuisines (Italian, Asian, Filipino, etc.) to set weekly targets
 - **Metric / imperial toggle** — switch between g/kg/dl and oz/lbs/cups; clears cached recipes so units are consistent
 - **Print / share** — opens a dark-themed printable page; switches to white for physical printing
+- **Freezer tracker** — log a planned week to a freezer inventory; track remaining portions with +/− controls; age warnings for items ≥ 90 days old
 - **Export / import** — save and restore the full plan as JSON; export shopping list as `.txt`
 
 ---
