@@ -1218,13 +1218,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <p style={{ margin:"0 0 8px", fontSize:11, color:"#b4b2c2", lineHeight:1.5, fontFamily:"sans-serif", flex:1 }}>
                         {meal.description}
                       </p>
-                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                        <span style={{ fontSize:10, padding:"2px 6px", background:"#141517",
-                          borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>⏱ {meal.prepTime}</span>
+                      <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden" }}>
+                        <span style={{ fontSize:9, padding:"2px 5px", background:"#141517",
+                          borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>⏱ {meal.prepTime}</span>
                         <ProteinBadge protein={meal.protein} />
                         {meal.category && (() => { const cat=MEAL_CATEGORIES.find(c=>c.key===meal.category); return cat ? (
-                          <span style={{ fontSize:10, padding:"2px 6px", background:"#141517",
-                            borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>{cat.emoji} {cat.label}</span>
+                          <span style={{ fontSize:9, padding:"2px 5px", background:"#141517",
+                            borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif", whiteSpace:"nowrap",
+                            overflow:"hidden", textOverflow:"ellipsis" }}>{cat.emoji} {cat.label}</span>
                         ) : null; })()}
                       </div>
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
