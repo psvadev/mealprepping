@@ -19,6 +19,8 @@ input[type="range"] { accent-color: #e8a838; cursor: pointer; height: 4px; }
 input[type="range"]:focus { outline: none; }
 * { -webkit-tap-highlight-color: transparent; }
 textarea:focus, input:focus { outline: none; }
+@media (min-width: 1600px) { .grid-container { max-width: 1800px !important; } .grid-cell { min-height: 120px !important; } }
+@media (min-width: 2000px) { .grid-container { max-width: 2200px !important; } .grid-cell { min-height: 140px !important; } }
 </style>
 </head>
 <body>
@@ -670,7 +672,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       {/* ── Header ── */}
       <div style={{ background:"linear-gradient(180deg,#1a1b1e 0%,#0e0f11 100%)",
         borderBottom:"1px solid #2a2b30", padding:"20px 20px 14px", position:"sticky", top:0, zIndex:100 }}>
-        <div style={{ maxWidth:1400, margin:"0 auto" }}>
+        <div className="grid-container" style={{ maxWidth:1400, margin:"0 auto" }}>
 
           {/* Title row */}
           <div style={{ display:"flex", alignItems:"baseline", gap:10, marginBottom:2 }}>
@@ -835,7 +837,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       </div>
 
       {/* ── Main content ── */}
-      <div style={{ maxWidth:1400, margin:"0 auto", padding:"18px 16px" }}>
+      <div className="grid-container" style={{ maxWidth:1400, margin:"0 auto", padding:"18px 16px" }}>
 
         {error && (
           <div style={{ background:"#2a1a1a", border:"1px solid #6a3a3a", borderRadius:8,
@@ -902,10 +904,11 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                                 }
                                 setDragMeal(null); setDragSource(null); setActiveCell(null);
                               }}
+                              className="grid-cell"
                               style={{ minHeight:90, height:"100%", boxSizing:"border-box", borderRadius:8,
                                 border: isActive ? "2px solid #e8a838" : meal ? `1px solid ${pColor||"#2a2b30"}55` : "1px dashed #22232a",
                                 background: meal ? "#1c1d21" : isActive ? "#141517" : "transparent",
-                                cursor:"pointer", padding:"9px 6px",
+                                cursor:"pointer", padding:"9px 6px 12px",
                                 display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
                                 gap:2, transition:"border 0.1s, background 0.1s", position:"relative" }}
                             >
