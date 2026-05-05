@@ -522,7 +522,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.meals?.length) {
-        setSuggestions(prev => [...prev.filter(s=>s.protein!==proteinKey), ...parsed.meals]);
+        const fixed = parsed.meals.map(m => ({...m, protein: proteinKey}));
+        setSuggestions(prev => [...prev.filter(s=>s.protein!==proteinKey), ...fixed]);
       } else setError("Kunne ikke generere nye forslag.");
     } catch(err) { setError(`Nettverksfeil: ${err.message}`); }
     setRerollLoading(null);
