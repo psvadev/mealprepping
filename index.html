@@ -611,11 +611,11 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       <style>
         body{font-family:sans-serif;padding:24px;max-width:1000px;margin:0 auto;background:#0e0f11;color:#e4ddd0}
         h1,h2{color:#e4ddd0}
-        table{border-collapse:collapse;width:100%}
-        th,td{border:1px solid #2a2b30;padding:8px 10px;font-size:12px}
-        thead th{background:#18191c;color:#b4b2c2;font-size:11px}
-        tbody td{background:#141517;vertical-align:top;min-width:80px}
-        td:first-child{background:#18191c;color:#747280;font-size:11px;font-weight:600;white-space:nowrap}
+        table{border-collapse:collapse;width:100%;table-layout:fixed}
+        th,td{border:1px solid #2a2b30;padding:6px 8px;font-size:11px;word-wrap:break-word;overflow-wrap:break-word}
+        thead th{background:#18191c;color:#b4b2c2;font-size:10px}
+        tbody td{background:#141517;vertical-align:top}
+        td:first-child{background:#18191c;color:#747280;font-size:10px;font-weight:600;white-space:nowrap;width:48px}
         .empty{color:#3a3b40}
         .cat-title{font-weight:700;font-size:13px;margin-bottom:6px;color:#e8a838}
         .cat-box{min-width:180px}
@@ -626,7 +626,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
         @media print{body{background:#fff;color:#111}th,td{border-color:#ccc}thead th{background:#f0f0f0;color:#333}tbody td{background:#fff}td:first-child{background:#f8f8f8;color:#555}.print-btn{display:none}}
       </style>
       </head><body>
-      <h1 style="font-size:20px;margin-bottom:4px">🥦 Hva skal vi ha til middag?</h1>
+      <h1 style="font-size:20px;margin-bottom:4px">🧊 Reheat &amp; Eat</h1>
       <p class="meta">Generert ${new Date().toLocaleDateString("nb-NO")} · ${portions} porsjoner per rett</p>
       <table>
         <thead><tr><th style="text-align:left"></th>
