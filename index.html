@@ -586,7 +586,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Svar alltid på norsk bokmål.\n\nLag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. For distinkte ingredienser som proteiner, sjeldne grønnsaker og spesielle ingredienser: hold dem som separate linjer med rettekontekst i parentes, f.eks. "Kyllingfileter (til tandoori) — 1.2 kg" og "Kyllingfileter (til kyllingtaco) — 1.2 kg". For generiske basisingredienser som går igjen i mange retter (løk, hvitløk, ingefær, chili, gulrot, selleri, lime, sitron, ferske urter o.l.): slå sammen til én linje med totalmengde uten rettekontekst, f.eks. "Løk — 9 stk". ${units === 'imperial'
+            content:`Svar alltid på norsk bokmål.\n\nLag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. For hver ingrediens: bruk en totalrad med ingrediensnavn og samlet mengde. Hvis ingrediensen brukes i flere retter, legg til en "items"-liste med én rad per rett som viser rettens navn og mengden til den retten. Generiske basisingredienser som løk, hvitløk, ingefær, chili, gulrot, selleri, lime, sitron og ferske urter trenger ikke underrader — bare totalrad. Eksempel på struktur:\n[{ "name": "Kyllingfileter", "amount": "2.4 kg", "items": [{ "name": "Thai gryte", "amount": "1.3 kg" }, { "name": "Chicken adobo", "amount": "1.1 kg" }] }, { "name": "Løk", "amount": "9 stk" }] ${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk metriske mål (gram, kg, dl, mil, liter)."
             } Inkluder prisestimat per kategori og totalt, basert på norske butikkpriser.\n\nLangtidsholdbare basisvarer som sjelden må kjøpes (salt, pepper, krydder, olje, eddik, soyasaus, mel, sukker, tørket pasta, ris, hermetikk, buljong, tomatpuré, honning, sennep o.l.) skal samles i én egen kategori kalt "Sjekk i skapene" med emoji 🧂. Ikke ta med pris for denne kategorien. Alle andre ingredienser som bør kjøpes fersk denne uken legges i vanlige kategorier.\n\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "price": { "low": 120, "high": 160 },\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    },\n    {\n      "name": "Sjekk i skapene",\n      "emoji": "🧂",\n      "items": [{ "name": "Salt", "amount": "" }, { "name": "Olivenolje", "amount": "litt" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
@@ -649,7 +649,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     const date = new Date().toLocaleDateString("nb-NO");
     const header = `Handleliste uke ${shoppingWeek+1} — ${portions} porsjoner per rett\nGenerert ${date}\n\n`;
     const lines = sl.categories.map(cat =>
-      `${cat.emoji} ${cat.name}${cat.price ? ` (ca. ${cat.price.low}–${cat.price.high} kr)` : ""}\n${cat.items.map(i=>`  - ${i.name}: ${i.amount}`).join("\n")}`
+      `${cat.emoji} ${cat.name}${cat.price ? ` (ca. ${cat.price.low}–${cat.price.high} kr)` : ""}\n${cat.items.map(i=>`  - ${i.name}${i.amount ? `: ${i.amount}` : ""}${i.items?.length ? "\n"+i.items.map(s=>`      • ${s.name}${s.amount ? `: ${s.amount}` : ""}`).join("\n") : ""}`).join("\n")}`
     ).join("\n\n");
     const price = sl.totalPrice
       ? `\n\nEstimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr`
@@ -675,7 +675,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         <div style="column-count:3;column-gap:24px">
           ${sl.categories.map(cat=>`<div class="cat-box" style="break-inside:avoid;margin-bottom:20px">
             <div class="cat-title">${cat.emoji} ${cat.name}</div>
-            <ul>${cat.items.map(i=>`<li>${i.name} — ${i.amount}</li>`).join("")}</ul>
+            <ul>${cat.items.map(i=>`<li>${i.name}${i.amount ? ` — ${i.amount}` : ""}${i.items?.length ? `<ul style="margin:2px 0 4px;padding-left:14px">${i.items.map(s=>`<li style="color:#999;font-size:11px">${s.name}${s.amount ? ` — ${s.amount}` : ""}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>
           </div>`).join("")}
         </div>`;
     }).join("");
@@ -1360,11 +1360,17 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         </div>
                         <ul style={{ margin:0, padding:0, listStyle:"none" }}>
                           {cat.items.map((item,j) => (
-                            <li key={j} style={{ display:"flex", justifyContent:"space-between",
-                              alignItems:"baseline", padding:"4px 0",
-                              borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none" }}>
-                              <span style={{ fontSize:12, color:"#d4cdc4", fontFamily:"sans-serif" }}>{item.name}</span>
-                              <span style={{ fontSize:11, color:"#b8b0a8", fontFamily:"sans-serif", marginLeft:8 }}>{item.amount}</span>
+                            <li key={j} style={{ padding:"4px 0", borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none" }}>
+                              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+                                <span style={{ fontSize:12, color:"#d4cdc4", fontFamily:"sans-serif", fontWeight: item.items?.length ? 600 : 400 }}>{item.name}</span>
+                                <span style={{ fontSize:11, color:"#b8b0a8", fontFamily:"sans-serif", marginLeft:8 }}>{item.amount}</span>
+                              </div>
+                              {item.items?.map((sub,k) => (
+                                <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", paddingLeft:12, marginTop:2 }}>
+                                  <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>{sub.name}</span>
+                                  <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginLeft:8 }}>{sub.amount}</span>
+                                </div>
+                              ))}
                             </li>
                           ))}
                         </ul>
