@@ -1044,26 +1044,26 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               if (s.count===0) return null;
               return (
                 <div key={w} style={{ marginBottom:10, background:"#141517", border:"1px solid #22232a",
-                  borderRadius:8, padding:"10px 14px" }}>
+                  borderRadius:8, padding:"10px 16px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
                   <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                    letterSpacing:"0.5px", fontWeight:600, marginBottom:8 }}>
-                    NÆRING UKE {w+1} — 1 porsjon × {s.count} middager (ukestotal per person)
+                    letterSpacing:"0.5px", fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
+                    NÆRING UKE {w+1}<br/>
+                    <span style={{ fontWeight:400, letterSpacing:0 }}>1 porsjon × {s.count} middager</span>
                   </div>
-                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                    {[
-                      {label:"Kalorier", val:`${s.calories} kcal`, color:"#d4a84a"},
-                      {label:"Protein",  val:`${s.protein}g`,      color:"#4a8aaa"},
-                      {label:"Fett",     val:`${s.fat}g`,          color:"#aa6a4a"},
-                      {label:"Karbo",    val:`${s.carbs}g`,        color:"#8a6aaa"},
-                      {label:"Fiber",    val:`${s.fiber}g`,        color:"#7abf7a"},
-                    ].map(n => (
-                      <div key={n.label} style={{ display:"flex", flexDirection:"column", alignItems:"center",
-                        padding:"6px 10px", background:"#18191c", borderRadius:7, minWidth:80, gap:2 }}>
-                        <span style={{ fontSize:13, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
-                        <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif" }}>{n.label}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <div style={{ width:"1px", height:36, background:"#2a2b30", flexShrink:0 }} />
+                  {[
+                    {label:"Kalorier", val:`${s.calories} kcal`, color:"#d4a84a"},
+                    {label:"Protein",  val:`${s.protein}g`,      color:"#4a8aaa"},
+                    {label:"Fett",     val:`${s.fat}g`,          color:"#aa6a4a"},
+                    {label:"Karbo",    val:`${s.carbs}g`,        color:"#8a6aaa"},
+                    {label:"Fiber",    val:`${s.fiber}g`,        color:"#7abf7a"},
+                  ].map(n => (
+                    <div key={n.label} style={{ flex:"1 1 80px", display:"flex", flexDirection:"column",
+                      alignItems:"center", padding:"6px 8px", background:"#18191c", borderRadius:7, gap:2 }}>
+                      <span style={{ fontSize:14, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
+                      <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif" }}>{n.label}</span>
+                    </div>
+                  ))}
                 </div>
               );
             })}
