@@ -491,6 +491,43 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     setLoading(false);
   }, [anthropicKey, portions, proteinTargets, maxTime, exclusions, allCuisines, cuisineTargets, suggestionCount, plan, mealHistory]);
 
+  // ── Re-roll single protein category ──────────────────────────────────────
+  const [rerollLoading, setRerollLoading] = useState(null);
+  const rerollProtein = useCallback(async (proteinKey) => {
+    if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
+    const p = PROTEINS.find(x=>x.key===proteinKey);
+    if (!p) return;
+    setRerollLoading(proteinKey); setError(null);
+    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
+    const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
+    const existing = suggestions.filter(s=>s.protein!==proteinKey).map(s=>s.name);
+    const avoidLine = [...alreadyPlanned, ...existing].length
+      ? `\nDisse er allerede foreslått eller planlagt, ikke gjenta dem: ${[...alreadyPlanned,...existing].join(", ")}.`
+      : "";
+    const historyLine = mealHistory.length ? `\nMathistorikk (nylig brukt, unngå gjentakelse): ${mealHistory.slice(-30).join(", ")}.` : "";
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", "x-api-key":anthropicKey,
+          "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-6", max_tokens:1200, system:SYSTEM_PROMPT,
+          messages:[{ role:"user", content:`Svar alltid på norsk bokmål.\n\nForeslå 5 middager med protein "${p.label}" for en norsk familie. Hver rett lages i ${portions} porsjoner. Alle retter skal ha forberedelsestid på MAKS ${maxTime} minutter.${exclusionLine}${avoidLine}${historyLine}
+Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Foretrekk gryter, supper, sauser og ovnsretter. Gi god variasjon i kjøkken og tilberedningsmetode.
+Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn",\n      "emoji": "🍲",\n      "prepTime": "30 min",\n      "freezer": true,\n      "protein": "${proteinKey}",\n      "category": "gryte",\n      "tags": [],\n      "description": "Kort beskrivelse på 1 setning"\n    }\n  ]\n}\nMulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat", "wrap", "klassisk".` }]
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||""}`); setRerollLoading(null); return; }
+      const text = data.content?.find(b=>b.type==="text")?.text||"";
+      const parsed = parseMeals(text);
+      if (parsed?.meals?.length) {
+        setSuggestions(prev => [...prev.filter(s=>s.protein!==proteinKey), ...parsed.meals]);
+      } else setError("Kunne ikke generere nye forslag.");
+    } catch(err) { setError(`Nettverksfeil: ${err.message}`); }
+    setRerollLoading(null);
+  }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory]);
+
   // ── Shopping list ─────────────────────────────────────────────────────────
   const generateShoppingList = async (week, force=false) => {
     if (week === undefined) week = shoppingWeek;
@@ -1082,12 +1119,19 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
                       const count = suggestions.filter(s=>s.protein===p.key).length;
                       if (!count) return null;
                       return (
-                        <button key={p.key} onClick={()=>{setFilterProtein(filterProtein===p.key?null:p.key);setFilterCategory(null);}} style={{
-                          fontSize:10, padding:"3px 9px", borderRadius:10,
-                          border: filterProtein===p.key ? `1px solid ${p.color}` : "1px solid #2a2b30",
-                          background: filterProtein===p.key ? p.bg : "transparent",
-                          color: filterProtein===p.key ? p.color : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
-                        }}>{p.emoji} {p.label} ({count})</button>
+                        <div key={p.key} style={{ display:"flex", alignItems:"center", gap:2 }}>
+                          <button onClick={()=>{setFilterProtein(filterProtein===p.key?null:p.key);setFilterCategory(null);}} style={{
+                            fontSize:10, padding:"3px 9px", borderRadius:10,
+                            border: filterProtein===p.key ? `1px solid ${p.color}` : "1px solid #2a2b30",
+                            background: filterProtein===p.key ? p.bg : "transparent",
+                            color: filterProtein===p.key ? p.color : "#b4b2c2", cursor:"pointer", fontFamily:"sans-serif"
+                          }}>{p.emoji} {p.label} ({count})</button>
+                          <button onClick={()=>rerollProtein(p.key)} disabled={!!rerollLoading} title={`Hent 5 nye ${p.label}-forslag`} style={{
+                            fontSize:11, padding:"2px 6px", borderRadius:10, border:`1px solid #2a2b30`,
+                            background:"transparent", color: rerollLoading===p.key ? p.color : "#747280",
+                            cursor: rerollLoading ? "not-allowed" : "pointer", fontFamily:"sans-serif", lineHeight:1
+                          }}>{rerollLoading===p.key ? "…" : "🔄"}</button>
+                        </div>
                       );
                     })}
                     {MEAL_CATEGORIES.map(cat => {
