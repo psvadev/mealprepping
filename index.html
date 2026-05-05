@@ -1150,6 +1150,17 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         }}>{cat.emoji} {cat.label} ({count})</button>
                       );
                     })}
+                    <div draggable
+                      onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
+                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
+                      onClick={()=>{ if(activeCell) assignMeal(LEFTOVER_MEAL,activeCell.week,activeCell.day); }}
+                      style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px",
+                        borderRadius:10, border:"1px dashed #2a2b30", background:"transparent",
+                        cursor: activeCell ? "pointer" : "grab", color: activeCell ? "#e8a838" : "#747280",
+                        fontFamily:"sans-serif", fontSize:10,
+                        ...(activeCell && {borderColor:"#e8a838"}) }}>
+                      ♻️ Rester-dag
+                    </div>
                   </div>
                 )}
               </div>
@@ -1180,24 +1191,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               </div>
             )}
 
-            {/* Rester chip — always draggable, clickable in select mode */}
-            <div style={{ marginBottom:8 }}>
-              <div draggable
-                onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
-                onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
-                onClick={()=>{ if(activeCell) assignMeal(LEFTOVER_MEAL,activeCell.week,activeCell.day); }}
-                style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px",
-                  borderRadius:8, border:"1px dashed #2a2b30", background:"transparent",
-                  cursor: activeCell ? "pointer" : "grab", color:"#747280",
-                  fontFamily:"sans-serif", fontSize:11,
-                  ...(activeCell && {borderColor:"#e8a838", color:"#e8a838"}) }}>
-                <span style={{ opacity:0.7 }}>♻️</span>
-                <span>Rester-dag</span>
-                {activeCell
-                  ? <span style={{ fontSize:10, fontWeight:600 }}>→ klikk for å sette inn</span>
-                  : <span style={{ fontSize:10, color:"#4a4858" }}>dra til kalender</span>}
-              </div>
-            </div>
 
             {/* Suggestion cards */}
             {filteredSuggestions.length>0 && (
@@ -1217,7 +1210,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         border: isExpanded ? "1px solid #aaa8b8" : "1px solid #22232a",
                         borderRadius:10, padding:"12px 12px 10px", cursor:"grab",
                         transition:"border 0.1s", gridColumn:isExpanded?"1 / -1":"auto",
-                        opacity:dragMeal?.name===meal.name?0.4:1 }}>
+                        opacity:dragMeal?.name===meal.name?0.4:1,
+                        display:"flex", flexDirection:"column" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:5 }}>
                         <span style={{ fontSize:20 }}>{meal.emoji}</span>
                         <span style={{ fontSize:12, fontWeight:700, color:"#e4ddd0", lineHeight:1.2, flex:1 }}>{meal.name}</span>
@@ -1227,7 +1221,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         }} title={isFavourite(meal)?"Fjern fra favoritter":"Legg til favoritter"}>★</button>
                         {!activeCell && <span style={{ fontSize:10, color:"#747280" }}>{isExpanded?"▲":"▼"}</span>}
                       </div>
-                      <p style={{ margin:"0 0 8px", fontSize:11, color:"#b4b2c2", lineHeight:1.5, fontFamily:"sans-serif" }}>
+                      <p style={{ margin:"0 0 8px", fontSize:11, color:"#b4b2c2", lineHeight:1.5, fontFamily:"sans-serif", flex:1 }}>
                         {meal.description}
                       </p>
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
