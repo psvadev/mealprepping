@@ -220,6 +220,7 @@ function App() {
   const [showFavourites,setShowFavourites]= useState(false);
   const [confirmClear,  setConfirmClear]  = useState(false);
   const [lastShoppingKeys,setLastShoppingKeys]=useState(() => lsGet('lastShoppingKeys',{}));
+  const [checkedItems,  setCheckedItems]  = useState(() => lsGet('checkedItems', {}));
   const [notesDraft,    setNotesDraft]    = useState('');
 
   const importRef = useRef(null);
@@ -259,6 +260,7 @@ function App() {
   useEffect(() => lsSet('recipeCache',     recipeCache),     [recipeCache]);
   useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
   useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
+  useEffect(() => lsSet('checkedItems',     checkedItems),     [checkedItems]);
 
   // Sync note draft when modal opens
   useEffect(() => {
@@ -268,13 +270,16 @@ function App() {
   // Close modal on Escape
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key !== 'Escape' || !planModal) return;
-      setMealNotes(prev => ({...prev, [planModal.meal.name]: notesDraft}));
-      setPlanModal(null);
+      if (e.key !== 'Escape') return;
+      if (suggestionModal) { setSuggestionModal(null); return; }
+      if (planModal) {
+        setMealNotes(prev => ({...prev, [planModal.meal.name]: notesDraft}));
+        setPlanModal(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [planModal, notesDraft]);
+  }, [planModal, suggestionModal, notesDraft]);
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
@@ -600,10 +605,21 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       if (parsed?.categories) {
         setShoppingLists(prev=>({...prev,[week]:parsed}));
         setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
+        setCheckedItems(prev=>{ const n={...prev}; delete n[week]; return n; });
       } else setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`);
     } catch (err) { setError(`Nettverksfeil: ${err.message}`); }
     setShoppingLoading(false);
   };
+
+  function toggleCheckedItem(week, catName, itemName) {
+    const key = `${catName}|${itemName}`;
+    setCheckedItems(prev => {
+      const weekMap = { ...(prev[week] || {}) };
+      if (weekMap[key]) delete weekMap[key];
+      else weekMap[key] = true;
+      return { ...prev, [week]: weekMap };
+    });
+  }
 
   // ── Export / import ───────────────────────────────────────────────────────
   const exportPlan = () => {
@@ -709,6 +725,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       </table>
       ${shoppingHtml}
       <p style="margin-top:32px;display:flex;gap:10px"><button onclick="window.print()" class="print-btn">Skriv ut</button><button onclick="window.close()" class="print-btn" style="background:#3a1a1a;color:#e87060;border-color:#e87060">✕ Lukk</button></p>
+      <script>document.addEventListener('keydown',e=>{if(e.key==='Escape')window.close();});<\/script>
       </body></html>`;
 
     const win = window.open('','_blank');
@@ -765,7 +782,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             <div style={{ display:"flex", alignItems:"center", gap:5 }}>
               <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", letterSpacing:"0.5px" }}>UKE</span>
               {[1,2,3,4].map(w => (
-                <button key={w} onClick={()=>setWeeks(w)} style={{
+                <button key={w} onClick={()=>{ setWeeks(w); if(view==="shopping") setShoppingWeek(w-1); }} style={{
                   width:28, height:28, borderRadius:5,
                   border: weeks===w ? "2px solid #e8a838" : "1px solid #2a2b30",
                   background: weeks===w ? "#22232a" : "transparent",
@@ -1073,7 +1090,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 <button onClick={fetchAllRecipes} disabled={!!recipeLoading} style={{
                   padding:"6px 14px", borderRadius:7, border:"1px solid #2a2b30",
                   background:"transparent", color: recipeLoading ? "#747280" : "#b4b2c2",
-                  cursor: recipeLoading ? "default" : "pointer", fontSize:11, fontFamily:"sans-serif"
+                  cursor: recipeLoading ? "not-allowed" : "pointer", fontSize:11, fontFamily:"sans-serif"
                 }}>
                   {recipeLoading ? `Laster ${recipeLoading}...` : "Last alle oppskrifter"}
                 </button>
@@ -1297,6 +1314,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 🛒 Handleliste — {portions} porsjoner per rett
               </h2>
               <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
+                {Object.keys(checkedItems[shoppingWeek] || {}).length > 0 && (
+                  <button onClick={()=>setCheckedItems(prev=>{ const n={...prev}; delete n[shoppingWeek]; return n; })} style={{
+                    padding:"6px 14px", borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
+                    color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>✕ Nullstill</button>
+                )}
                 <button onClick={()=>generateShoppingList(shoppingWeek, true)} disabled={shoppingLoading} style={{
                   padding:"6px 14px", borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
                   color:shoppingLoading?"#747280":"#b4b2c2", cursor:shoppingLoading?"not-allowed":"pointer",
@@ -1316,13 +1338,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               {Array.from({length:weeks},(_,w) => {
                 const hasList = !!shoppingLists[w];
                 const isActive = shoppingWeek===w;
+                const checkedCount = Object.keys(checkedItems[w] || {}).length;
+                const totalCount = shoppingLists[w]?.categories?.reduce((s,c)=>s+c.items.length,0) || 0;
                 return (
                   <button key={w} onClick={()=>generateShoppingList(w)}
                     style={{ padding:"6px 16px", borderRadius:7, cursor:"pointer", fontFamily:"sans-serif",
                       border: isActive ? "2px solid #e8a838" : "1px solid #2a2b30",
                       background: isActive ? "#22232a" : "transparent",
                       color: isActive ? "#e8e0d0" : "#b4b2c2", fontSize:12 }}>
-                    Uke {w+1}{hasList ? " ✓" : ""}
+                    Uke {w+1}{hasList ? " ✓" : ""}{checkedCount > 0 ? <span style={{ color:"#e8a838", marginLeft:4 }}>{checkedCount}/{totalCount}</span> : null}
                   </button>
                 );
               })}
@@ -1359,20 +1383,28 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           {cat.price && <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>ca. {cat.price.low}–{cat.price.high} kr</span>}
                         </div>
                         <ul style={{ margin:0, padding:0, listStyle:"none" }}>
-                          {cat.items.map((item,j) => (
-                            <li key={j} style={{ padding:"4px 0", borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none" }}>
+                          {cat.items.map((item,j) => {
+                            const checked = !!checkedItems[shoppingWeek]?.[`${cat.name}|${item.name}`];
+                            return (
+                            <li key={j} onClick={()=>toggleCheckedItem(shoppingWeek, cat.name, item.name)}
+                              style={{ padding:"4px 0", borderBottom: j<cat.items.length-1 ? "1px solid #141517" : "none",
+                                cursor:"pointer", userSelect:"none", opacity: checked ? 0.55 : 1 }}>
                               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
-                                <span style={{ fontSize:12, color:"#d4cdc4", fontFamily:"sans-serif", fontWeight: item.items?.length ? 600 : 400 }}>{item.name}</span>
-                                <span style={{ fontSize:11, color:"#b8b0a8", fontFamily:"sans-serif", marginLeft:8 }}>{item.amount}</span>
+                                <span style={{ fontSize:12, color: checked ? "#747280" : "#d4cdc4", fontFamily:"sans-serif",
+                                  fontWeight: item.items?.length ? 600 : 400,
+                                  textDecoration: checked ? "line-through" : "none" }}>{item.name}</span>
+                                <span style={{ fontSize:11, color: checked ? "#747280" : "#b8b0a8", fontFamily:"sans-serif",
+                                  marginLeft:8, textDecoration: checked ? "line-through" : "none" }}>{item.amount}</span>
                               </div>
-                              {item.items?.map((sub,k) => (
+                              {!checked && item.items?.map((sub,k) => (
                                 <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", paddingLeft:12, marginTop:2 }}>
                                   <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>{sub.name}</span>
                                   <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginLeft:8 }}>{sub.amount}</span>
                                 </div>
                               ))}
                             </li>
-                          ))}
+                            );
+                          })}
                         </ul>
                       </div>
                     ))}

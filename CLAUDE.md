@@ -53,6 +53,7 @@ All keys use the `mp_` prefix.
 | `mp_suggestionCount` | number | Number of suggestions to generate (5–30, step 5) |
 | `mp_units` | string | Measurement system: `"metric"` (default) or `"imperial"` |
 | `mp_freezerItems` | array | Freezer inventory — meals logged from the plan with portion tracking |
+| `mp_checkedItems` | object | Shopping list check-off state — `{ [weekIndex]: { [catName|itemName]: true } }` |
 
 ---
 
@@ -73,7 +74,8 @@ Four top-level views switched by `setView(...)`:
 
 - **Weekly grid** — table of weeks × days. Cells show meal emoji, name, and a `ProteinBadge` pill. Click empty cell to enter "select mode" (amber highlight); click meal card to assign. Drag meal cards directly onto cells. All cells in a row share equal height regardless of content.
 - **Drag and drop** — `draggable` on suggestion/favourite cards and on meals already in the grid. `onDragOver`/`onDrop` on grid cells. A `dragSource` state (`{week,day}` or `null`) distinguishes the two cases: dragging from the grid to another grid cell **swaps** the two meals; dragging from suggestions/favourites onto an occupied cell displaces the existing meal back to suggestions.
-- **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Header includes a ★ favourite button (amber when active) to star/unstar the meal without leaving the modal. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes saved to `mp_mealNotes` on modal close.
+- **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Header includes a ★ favourite button (amber when active) to star/unstar the meal without leaving the modal. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes saved to `mp_mealNotes` on modal close. ESC closes the modal (saves notes first).
+- **Suggestion modal** — clicking an expanded suggestion card opens a detail overlay. ESC closes it (priority over plan modal in the shared ESC handler).
 - **Protein stats column** — rightmost grid column shows actual vs. target counts per protein type for each week.
 - **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache` as 1 portion of each planned meal; updates automatically as recipes load. Label format: `NÆRING UKE N — 1 porsjon × M middager (ukestotal per person)`.
 - **Load all recipes button** — "Last alle oppskrifter" appears above the nutrition summary when uncached planned meals exist. Calls `fetchAllRecipes()` which iterates unique planned meals and fetches each sequentially.
@@ -125,7 +127,16 @@ Freezer inventory for tracking batch-cooked portions.
 `POST /v1/messages` — returns `{ components: [{name, ingredients[]}], steps, nutrition, pricePerPortion?, tips? }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card expand** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). Prompt explicitly requests 1–3 batch/freeze tips (`tips` array) — how to pack and freeze the dish, and the best reheating method (oven, microwave, pan). Tips must not suggest any per-dinner prep or fresh components. Tips are displayed in the plan modal and in suggestion card expanded view when cached. Old cached recipes with flat `ingredients[]` still render correctly via a backward-compatible fallback in the modal.
 
 ### Generate shopping list — `generateShoppingList(force?)`
-`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system.
+`POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system. Regenerating also clears `checkedItems` for that week.
+
+---
+
+## Shopping view
+
+- **Week tabs** — one tab per active week. Shows a `checkedCount/totalCount` amber fraction badge when any items are checked for that week.
+- **Check-off** — each item `<li>` is clickable (`cursor: pointer`). Clicking toggles `checkedItems[week][catName|itemName]`. Checked items show name with `line-through`, dimmed color, and 55% opacity. Sub-items are hidden while the parent is checked.
+- **"✕ Nullstill" button** — appears in the shopping header only when ≥1 item is checked for the current week. Clears all checked items for that week. Styled as a ghost/outline button matching the other header buttons.
+- **Persistence** — `mp_checkedItems` persists in localStorage so check-off state survives page refresh. Cleared automatically when the list is regenerated for that week.
 
 ---
 
@@ -144,7 +155,7 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 | Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`. Excludes: API keys (`mp_anthropicKey`, `mp_kassalKey`) and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
 | Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. `freezerItems` restored if present in the file. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
-| Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button for in-page printing. |
+| Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button and a Lukk button; ESC also closes the popup window. **Note:** `<\/script>` must be escaped inside the JS template literal used to build the popup HTML — raw `</script>` terminates the outer Babel script block early and breaks the app. |
 
 ---
 
