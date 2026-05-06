@@ -1621,39 +1621,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               )}
             </div>
 
-            {/* Meal history */}
-            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
-              padding:"18px 20px", marginBottom:14 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-                <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                  letterSpacing:"0.5px", fontWeight:600 }}>MATHISTORIKK</div>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
-                    {mealHistory.length} middager
-                  </span>
-                  {mealHistory.length>0 && (
-                    <button onClick={()=>setMealHistory([])} style={{ padding:"4px 10px", borderRadius:5,
-                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
-                      cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm historikk</button>
-                  )}
-                </div>
-              </div>
-              {mealHistory.length===0 ? (
-                <div style={{ fontSize:12, color:"#747280", fontFamily:"sans-serif" }}>
-                  Ingen historikk ennå. Middager du legger til i planen lagres her og sendes til AI for å unngå gjentakelse.
-                </div>
-              ) : (
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6, maxHeight:160, overflowY:"auto" }}>
-                  {[...mealHistory].reverse().map((name,i) => (
-                    <div key={i} style={{ fontSize:11, padding:"3px 10px", background:"#141517",
-                      border:"1px solid #22232a", borderRadius:20, color:"#a8a6b6", fontFamily:"sans-serif" }}>
-                      {name}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Disliked meals */}
             <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
               padding:"18px 20px", marginBottom:14 }}>
@@ -1685,6 +1652,39 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <button onClick={()=>setDislikedMeals(prev=>prev.filter(n=>n!==name))}
                         style={{ background:"none", border:"none", cursor:"pointer", color:"#907070",
                           fontSize:12, padding:"0 2px", lineHeight:1 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Meal history */}
+            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
+              padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                  letterSpacing:"0.5px", fontWeight:600 }}>MATHISTORIKK</div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
+                    {mealHistory.length} middager
+                  </span>
+                  {mealHistory.length>0 && (
+                    <button onClick={()=>setMealHistory([])} style={{ padding:"4px 10px", borderRadius:5,
+                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                      cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm historikk</button>
+                  )}
+                </div>
+              </div>
+              {mealHistory.length===0 ? (
+                <div style={{ fontSize:12, color:"#747280", fontFamily:"sans-serif" }}>
+                  Ingen historikk ennå. Middager du legger til i planen lagres her og sendes til AI for å unngå gjentakelse.
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, maxHeight:160, overflowY:"auto" }}>
+                  {[...mealHistory].reverse().map((name,i) => (
+                    <div key={i} style={{ fontSize:11, padding:"3px 10px", background:"#141517",
+                      border:"1px solid #22232a", borderRadius:20, color:"#a8a6b6", fontFamily:"sans-serif" }}>
+                      {name}
                     </div>
                   ))}
                 </div>
