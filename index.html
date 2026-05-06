@@ -839,7 +839,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 🛒 Handleliste{filledCount>0 ? ` (${filledCount})` : ""}
               </button>
               <button onClick={()=>setView("fryser")} style={btnTab(view==="fryser")}>
-                🧊 Fryser{freezerItems.filter(i=>i.remaining>0).length>0 ? ` (${freezerItems.filter(i=>i.remaining>0).length})` : ""}
+                ❄️ Fryser{freezerItems.filter(i=>i.remaining>0).length>0 ? ` (${freezerItems.filter(i=>i.remaining>0).length})` : ""}
               </button>
               <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger</button>
               <div style={{ width:1, background:"#2a2b30", margin:"4px 2px", alignSelf:"stretch" }} />
@@ -1673,7 +1673,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           <div style={{ maxWidth:700, margin:"0 auto", paddingTop:8 }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:8 }}>
               <h2 style={{ margin:0, fontSize:15, fontWeight:600, color:"#e4ddd0", fontFamily:"sans-serif" }}>
-                🧊 Fryser
+                ❄️ Fryser
                 {freezerItems.filter(i=>i.remaining>0).length > 0 && (
                   <span style={{ marginLeft:8, fontSize:11, fontWeight:400, color:"#7abf7a",
                     background:"#1a2a1a", border:"1px solid #2a3a2a", borderRadius:10,
