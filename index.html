@@ -352,12 +352,22 @@ function App() {
     const today = new Date().toISOString().split('T')[0];
     const meals = plan[week].filter(m => m && !m.leftover);
     if (!meals.length) return;
-    const entries = meals.map(m => ({
-      id: `${Date.now()}-${m.name}`,
-      name: m.name, emoji: m.emoji || '🍽', protein: m.protein,
-      remaining: portions, total: portions, cookedAt: today
-    }));
-    setFreezerItems(prev => [...prev, ...entries]);
+    setFreezerItems(prev => {
+      let updated = [...prev];
+      meals.forEach(m => {
+        const existing = updated.find(i => i.name === m.name && i.cookedAt === today);
+        if (existing) {
+          updated = updated.map(i => i === existing
+            ? { ...i, total: i.total + portions, remaining: i.remaining + portions }
+            : i);
+        } else {
+          updated.push({ id: `${Date.now()}-${m.name}`, name: m.name,
+            emoji: m.emoji || '🍽', protein: m.protein,
+            remaining: portions, total: portions, cookedAt: today });
+        }
+      });
+      return updated;
+    });
     setView("fryser");
   };
 
