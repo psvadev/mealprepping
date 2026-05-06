@@ -23,6 +23,9 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Metric / imperial toggle** — switch between g/kg/dl and oz/lbs/cups; clears cached recipes so units are consistent
 - **Print / share** — opens a dark-themed printable page; switches to white for physical printing
 - **Freezer tracker** — log a planned week to a freezer inventory; track remaining portions with +/− controls; age warnings for items ≥ 90 days old
+- **Meal ratings** — 👍/👎 on freezer items once you've eaten a portion; thumbs up adds to favourites, thumbs down blocks the meal from future AI suggestions
+- **Shopping list check-off** — tap items while shopping to strike them through; progress persists across page refreshes and clears when the list is regenerated
+- **Batch & freeze tips** — each recipe includes 1–3 AI-generated tips on how to pack, freeze, and reheat the dish
 - **Export / import** — save and restore the full plan as JSON; export shopping list as `.txt`
 
 ---
