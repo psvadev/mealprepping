@@ -54,6 +54,7 @@ All keys use the `mp_` prefix.
 | `mp_units` | string | Measurement system: `"metric"` (default) or `"imperial"` |
 | `mp_freezerItems` | array | Freezer inventory — meals logged from the plan with portion tracking |
 | `mp_checkedItems` | object | Shopping list check-off state — `{ [weekIndex]: { [catName|itemName]: true } }` |
+| `mp_dislikedMeals` | array | Meal names the family didn't enjoy — fed into suggestion prompts as hard exclusions |
 
 ---
 
@@ -109,6 +110,8 @@ Freezer inventory for tracking batch-cooked portions.
 - Empty state message with instructions to use "→ Fryser" in the plan view.
 
 **`addWeekToFreezer(week)`** — collects all non-null, non-leftover meals for the week, maps each to a freezer entry (`remaining = total = portions`), appends to `freezerItems`, then navigates to `"fryser"` view.
+
+**Ratings** — 👍 / 👎 buttons appear on a Fryser item row once `remaining < total` (at least one portion eaten). 👍 adds the meal to `mp_favourites` (same object shape as suggestion cards) and removes it from `dislikedMeals`. 👎 adds the meal name to `mp_dislikedMeals` and removes it from favourites. The buttons toggle their border/background to show the active state. A "👎 Likt ikke" badge appears in the item's subtitle row when it's in the disliked list. `mp_dislikedMeals` is viewable and clearable per-item (or all at once) in Innstillinger → Liker ikke.
 
 ---
 
@@ -180,7 +183,8 @@ Sections:
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs, stored immediately in localStorage on change. Never included in plan exports.
 2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingList` immediately, since AI-generated amounts are baked into the cached text. Changing portions calls `changePortions(n)` which also clears `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — so re-fetched recipes reflect the new count.
 3. **Mathistorikk** — scrollable list of recent meals, clear button.
-4. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
+4. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
+5. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
 
 ---
 

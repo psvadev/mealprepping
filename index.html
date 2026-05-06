@@ -187,6 +187,7 @@ function App() {
   const [suggestions, setSuggestions] = useState(() => lsGet('suggestions', []));
   const [favourites,  setFavourites]  = useState(() => lsGet('favourites', []));
   const [freezerItems,setFreezerItems]= useState(() => lsGet('freezerItems', []));
+  const [dislikedMeals,setDislikedMeals]=useState(() => lsGet('dislikedMeals', []));
   const [mealHistory, setMealHistory] = useState(() => lsGet('mealHistory', []));
   const [mealNotes,   setMealNotes]   = useState(() => lsGet('mealNotes', {}));
 
@@ -248,6 +249,7 @@ function App() {
   useEffect(() => lsSet('suggestions',     suggestions),     [suggestions]);
   useEffect(() => lsSet('favourites',      favourites),      [favourites]);
   useEffect(() => lsSet('freezerItems',   freezerItems),    [freezerItems]);
+  useEffect(() => lsSet('dislikedMeals',  dislikedMeals),   [dislikedMeals]);
   useEffect(() => lsSet('mealHistory',     mealHistory),     [mealHistory]);
   useEffect(() => lsSet('mealNotes',       mealNotes),       [mealNotes]);
   useEffect(() => lsSet('proteinTargets',  proteinTargets),  [proteinTargets]);
@@ -480,6 +482,7 @@ function App() {
       .map(c=>`${c.label}: ca. ${cuisineTargets[c.key]}x per uke`).join(", ");
     const cuisineLine   = cuisineGoals ? `\nKjøkkenmål per uke (veiledende): ${cuisineGoals}.` : "";
     const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
+    const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
     const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
     const avoidLine     = alreadyPlanned.length ? `\nDisse er allerede planlagt, ikke gjenta dem: ${alreadyPlanned.join(", ")}.` : "";
     const historyLine   = mealHistory.length ? `\nMathistorikk (nylig brukt, unngå gjentakelse): ${mealHistory.slice(-30).join(", ")}.` : "";
@@ -495,7 +498,7 @@ function App() {
             role:"user",
             content:`Svar alltid på norsk bokmål.\n\nForeslå ${suggestionCount * weeks} middager for en norsk familie (${suggestionCount} per uke, ${weeks} uke${weeks>1?"r":""}). Hver rett lages i ${portions} porsjoner.
 Familien ønsker omtrent denne proteinfordelingen per uke (veiledende, ikke absolutt): ${targets}.
-Alle middager skal ha forberedelsestid på MAKS ${maxTime} minutter.${cuisineLine}${exclusionLine}${avoidLine}${historyLine}
+Alle middager skal ha forberedelsestid på MAKS ${maxTime} minutter.${cuisineLine}${exclusionLine}${dislikedLine}${avoidLine}${historyLine}
 Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Hele retten lages ferdig på batch-dagen, inkludert grønnsaker og tilbehør. Foretrekk gryter, supper, sauser og ovnsretter der alt er integrert og smaker like godt etter frysing og oppvarming. Unngå retter som krever ferske komponenter ved servering.
 Gi god variasjon i kjøkken og tilberedningsmetode: norske klassikere, asiatisk inspirert, middelhavet, supper, ovnsretter osv. IKKE gjenta samme rett eller veldig like retter.
 
@@ -540,6 +543,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     if (!p) return;
     setRerollLoading(proteinKey); setError(null);
     const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
+    const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
     const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
     const existing = suggestions.filter(s=>s.protein!==proteinKey).map(s=>s.name);
     const avoidLine = [...alreadyPlanned, ...existing].length
@@ -552,7 +556,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
         headers: anthropicHeaders,
         body: JSON.stringify({
           model:"claude-sonnet-4-6", max_tokens:2000, system:SYSTEM_PROMPT,
-          messages:[{ role:"user", content:`Svar alltid på norsk bokmål.\n\nForeslå 5 middager med protein "${p.label}" for en norsk familie. Hver rett lages i ${portions} porsjoner. Alle retter skal ha forberedelsestid på MAKS ${maxTime} minutter.${exclusionLine}${avoidLine}${historyLine}
+          messages:[{ role:"user", content:`Svar alltid på norsk bokmål.\n\nForeslå 5 middager med protein "${p.label}" for en norsk familie. Hver rett lages i ${portions} porsjoner. Alle retter skal ha forberedelsestid på MAKS ${maxTime} minutter.${exclusionLine}${dislikedLine}${avoidLine}${historyLine}
 Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Foretrekk gryter, supper, sauser og ovnsretter. Gi god variasjon i kjøkken og tilberedningsmetode.
 Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn",\n      "emoji": "🍲",\n      "prepTime": "30 min",\n      "freezer": true,\n      "protein": "${proteinKey}",\n      "category": "gryte",\n      "tags": [],\n      "description": "Kort beskrivelse på 1 setning"\n    }\n  ]\n}\nMulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat", "wrap", "klassisk".` }]
         })
@@ -625,7 +629,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   const exportPlan = () => {
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
       cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, favourites, mealNotes,
-      mealHistory, freezerItems, exportedAt: new Date().toISOString() };
+      mealHistory, freezerItems, dislikedMeals, exportedAt: new Date().toISOString() };
     const date = new Date().toISOString().split('T')[0];
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
   };
@@ -652,6 +656,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         if (d.mealNotes) setMealNotes(d.mealNotes);
         if (d.mealHistory) setMealHistory(d.mealHistory);
         if (d.freezerItems) setFreezerItems(d.freezerItems);
+        if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
         setError(null);
       } catch { setError("Kunne ikke lese filen. Sjekk at det er en gyldig middagsplan-fil."); }
     };
@@ -1590,6 +1595,43 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               )}
             </div>
 
+            {/* Disliked meals */}
+            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
+              padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                  letterSpacing:"0.5px", fontWeight:600 }}>LIKER IKKE</div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
+                    {dislikedMeals.length} retter
+                  </span>
+                  {dislikedMeals.length > 0 && (
+                    <button onClick={()=>setDislikedMeals([])} style={{ padding:"4px 10px", borderRadius:5,
+                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                      cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm liste</button>
+                  )}
+                </div>
+              </div>
+              {dislikedMeals.length === 0 ? (
+                <div style={{ fontSize:12, color:"#747280", fontFamily:"sans-serif" }}>
+                  Ingen retter markert som mislikt ennå. Gi 👎 på en rett i Fryser-visningen etter at du har spist den.
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {dislikedMeals.map((name,i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11,
+                      padding:"3px 8px 3px 10px", background:"#1a1414", border:"1px solid #3a2a2a",
+                      borderRadius:20, color:"#c07070", fontFamily:"sans-serif" }}>
+                      {name}
+                      <button onClick={()=>setDislikedMeals(prev=>prev.filter(n=>n!==name))}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"#907070",
+                          fontSize:12, padding:"0 2px", lineHeight:1 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Data */}
             <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
               padding:"18px 20px", marginBottom:14 }}>
@@ -1683,8 +1725,34 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               {isOld && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
                                 border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
                                 fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays}d gammel</span>}
+                              {dislikedMeals.includes(item.name) && <span style={{ fontSize:9, color:"#d47070", background:"#2a1a1a",
+                                border:"1px solid #3a2a2a", borderRadius:6, padding:"1px 6px",
+                                fontFamily:"sans-serif", fontWeight:600 }}>👎 Likt ikke</span>}
                             </div>
                           </div>
+                          {item.remaining < item.total && (
+                            <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                              <button
+                                onClick={()=>{
+                                  const meal = {name:item.name, emoji:item.emoji, protein:item.protein};
+                                  if (!favourites.find(f=>f.name===meal.name)) setFavourites(prev=>[...prev, meal]);
+                                  setDislikedMeals(prev=>prev.filter(n=>n!==item.name));
+                                }}
+                                title="Likte — legg til favoritter"
+                                style={{ width:30, height:30, borderRadius:6, border:`1px solid ${favourites.find(f=>f.name===item.name)?"#4a7a4a":"#2a2b30"}`,
+                                  background: favourites.find(f=>f.name===item.name) ? "#1a2a1a" : "transparent",
+                                  cursor:"pointer", fontSize:15, lineHeight:1 }}>👍</button>
+                              <button
+                                onClick={()=>{
+                                  setDislikedMeals(prev=>prev.includes(item.name)?prev:[...prev,item.name]);
+                                  setFavourites(prev=>prev.filter(f=>f.name!==item.name));
+                                }}
+                                title="Likte ikke — utelat fra fremtidige forslag"
+                                style={{ width:30, height:30, borderRadius:6, border:`1px solid ${dislikedMeals.includes(item.name)?"#7a2a2a":"#2a2b30"}`,
+                                  background: dislikedMeals.includes(item.name) ? "#2a1a1a" : "transparent",
+                                  cursor:"pointer", fontSize:15, lineHeight:1 }}>👎</button>
+                            </div>
+                          )}
                           {item.remaining === 0 ? (
                             <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif",
                               padding:"3px 10px", background:"#141517", borderRadius:8 }}>Tomt</span>
