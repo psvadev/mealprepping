@@ -1704,9 +1704,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   }, {})
                 ).sort(([a],[b]) => b.localeCompare(a)).map(([date, items]) => (
                   <div key={date}>
-                    <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                      letterSpacing:"0.8px", fontWeight:600, marginBottom:8 }}>
-                      LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                      <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", fontWeight:600 }}>
+                        LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
+                      </div>
+                      <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date))}
+                        style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #3a2a2a",
+                          background:"transparent", color:"#907070", cursor:"pointer",
+                          fontSize:11, fontFamily:"sans-serif" }}>Fjern batch</button>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                       {items.map(item => {
