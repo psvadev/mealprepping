@@ -1173,6 +1173,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           cursor:"grab", opacity:dragMeal?.name===meal.name?0.4:1 }}>
                         <span style={{ fontSize:16 }}>{meal.emoji}</span>
                         <span style={{ fontSize:12, color:"#e4ddd0", fontFamily:"sans-serif" }}>{meal.name}</span>
+                        <button onClick={e=>{ e.stopPropagation(); setFavourites(prev=>prev.filter(m=>m.name!==meal.name)); }}
+                          style={{ background:"none", border:"none", cursor:"pointer", color:"#747280",
+                            fontSize:12, padding:"0 0 0 2px", lineHeight:1 }}>✕</button>
                       </div>
                     ))}
                   </div>
