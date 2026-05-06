@@ -207,6 +207,7 @@ function App() {
   const [shoppingWeek,  setShoppingWeek]  = useState(0);
   const [shoppingLoading,setShoppingLoading] = useState(false);
   const [error,         setError]         = useState(null);
+  const [retryFn,       setRetryFn]       = useState(null);
   const [activeCell,    setActiveCell]    = useState(null);
   const [dragMeal,      setDragMeal]      = useState(null);
   const [dragSource,    setDragSource]    = useState(null);
@@ -486,7 +487,7 @@ function App() {
   // ── Generate suggestions ──────────────────────────────────────────────────
   const generateSuggestions = useCallback(async () => {
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
-    setLoading(true); setError(null); setSuggestions([]);
+    setLoading(true); setError(null); setRetryFn(null); setSuggestions([]);
     const targets = PROTEINS.map(p=>`${p.label}: ca. ${proteinTargets[p.key]}x per uke`).join(", ");
     const cuisineGoals = allCuisines.filter(c=>(cuisineTargets[c.key]||0)>0)
       .map(c=>`${c.label}: ca. ${cuisineTargets[c.key]}x per uke`).join(", ");
@@ -535,13 +536,14 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       const data = await res.json();
       if (!res.ok) {
         setError(`API-feil ${res.status}: ${data?.error?.message||JSON.stringify(data)}`);
+        setRetryFn(() => generateSuggestions);
         setLoading(false); return;
       }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.meals) setSuggestions(parsed.meals);
-      else setError(`Kunne ikke tolke svar. Rå respons: ${text.slice(0,200)}`);
-    } catch (err) { setError(`Nettverksfeil: ${err.message}`); }
+      else { setError(`Kunne ikke tolke svar. Rå respons: ${text.slice(0,200)}`); setRetryFn(() => generateSuggestions); }
+    } catch (err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => generateSuggestions); }
     setLoading(false);
   }, [anthropicKey, portions, proteinTargets, maxTime, exclusions, allCuisines, cuisineTargets, suggestionCount, plan, mealHistory]);
 
@@ -551,7 +553,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
     const p = PROTEINS.find(x=>x.key===proteinKey);
     if (!p) return;
-    setRerollLoading(proteinKey); setError(null);
+    setRerollLoading(proteinKey); setError(null); setRetryFn(null);
     const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
     const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
     const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
@@ -572,14 +574,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         })
       });
       const data = await res.json();
-      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||""}`); setRerollLoading(null); return; }
+      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||""}`); setRetryFn(() => () => rerollProtein(proteinKey)); setRerollLoading(null); return; }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.meals?.length) {
         const fixed = parsed.meals.map(m => ({...m, protein: proteinKey}));
         setSuggestions(prev => [...prev.filter(s=>s.protein!==proteinKey), ...fixed]);
-      } else setError("Kunne ikke generere nye forslag.");
-    } catch(err) { setError(`Nettverksfeil: ${err.message}`); }
+      } else { setError("Kunne ikke generere nye forslag."); setRetryFn(() => () => rerollProtein(proteinKey)); }
+    } catch(err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => () => rerollProtein(proteinKey)); }
     setRerollLoading(null);
   }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory]);
 
@@ -594,7 +596,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     const wKey = weekPlanKey(week);
     if (!force && shoppingLists[week] && wKey===lastShoppingKeys[week]) return;
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
-    setShoppingLoading(true); setError(null);
+    setShoppingLoading(true); setError(null); setRetryFn(null);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
@@ -613,15 +615,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         })
       });
       const data = await res.json();
-      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||JSON.stringify(data)}`); setShoppingLoading(false); return; }
+      if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||JSON.stringify(data)}`); setRetryFn(() => () => generateShoppingList(week, true)); setShoppingLoading(false); return; }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.categories) {
         setShoppingLists(prev=>({...prev,[week]:parsed}));
         setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
         setCheckedItems(prev=>{ const n={...prev}; delete n[week]; return n; });
-      } else setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`);
-    } catch (err) { setError(`Nettverksfeil: ${err.message}`); }
+      } else { setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`); setRetryFn(() => () => generateShoppingList(week, true)); }
+    } catch (err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => () => generateShoppingList(week, true)); }
     setShoppingLoading(false);
   };
 
@@ -938,10 +940,18 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         {error && (
           <div style={{ background:"#2a1a1a", border:"1px solid #6a3a3a", borderRadius:8,
             padding:"10px 14px", marginBottom:14, fontSize:12, color:"#d4a0a0",
-            fontFamily:"sans-serif", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            {error}
-            <button onClick={()=>setError(null)} style={{ background:"transparent", border:"none",
-              color:"#907070", cursor:"pointer", fontSize:16 }}>✕</button>
+            fontFamily:"sans-serif", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+            <span style={{ flex:1 }}>{error}</span>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+              {retryFn && (
+                <button onClick={()=>{ setError(null); setRetryFn(null); retryFn(); }}
+                  style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a",
+                    background:"transparent", color:"#d4a0a0", cursor:"pointer",
+                    fontSize:11, fontFamily:"sans-serif" }}>↩ Prøv igjen</button>
+              )}
+              <button onClick={()=>{ setError(null); setRetryFn(null); }} style={{ background:"transparent", border:"none",
+                color:"#907070", cursor:"pointer", fontSize:16 }}>✕</button>
+            </div>
           </div>
         )}
 
