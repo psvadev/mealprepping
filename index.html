@@ -1074,7 +1074,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               </button>
               <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger</button>
               <div style={{ width:1, background:"#2a2b30", margin:"4px 2px", alignSelf:"stretch" }} />
-              <button onClick={printPlan} title="Skriv ut / del plan" style={btnIcon()}>🖨 Skriv ut</button>
+              <button onClick={printPlan} title="Skriv ut / del plan" style={{
+                padding:"6px 12px", borderRadius:6, border:"1px solid #4a3a1a",
+                background:"transparent", color:"#c8a858", cursor:"pointer", fontSize:12, fontFamily:"sans-serif"
+              }}>🖨 Skriv ut</button>
               <input ref={importRef} type="file" accept=".json" onChange={importPlan} style={{ display:"none" }} />
             </div>
           </div>}
@@ -1663,7 +1666,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {!shoppingLoading && !shoppingLists[shoppingWeek] && (
               <div style={{ textAlign:"center", padding:"40px 20px", color:"#747280",
                 fontFamily:"sans-serif", fontSize:13, border:"1px dashed #22232a", borderRadius:12 }}>
-                Klikk på en uke ovenfor for å generere handleliste for den uken.
+                <div style={{ marginBottom:16 }}>Ingen handleliste for denne uken ennå.</div>
+                <button onClick={generateShoppingList} style={{
+                  padding:"10px 20px", borderRadius:8, border:"none",
+                  background:"#e8a838", color:"#0e0f11", cursor:"pointer",
+                  fontSize:13, fontWeight:600, fontFamily:"sans-serif"
+                }}>Generer handleliste</button>
               </div>
             )}
           </div>
@@ -2057,21 +2065,25 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                       {items.map(item => {
-                        const ageDays = Math.floor((Date.now() - new Date(item.cookedAt+'T12:00:00').getTime()) / 86400000);
-                        const isOld = ageDays >= 90;
+                        const ageDays  = Math.floor((Date.now() - new Date(item.cookedAt+'T12:00:00').getTime()) / 86400000);
+                        const isOld    = ageDays >= 90;
+                        const isAgeing = ageDays >= 60 && ageDays < 90;
                         return (
                         <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10,
                           padding:"10px 14px", background:"#18191c", borderRadius:9,
-                          border:`1px solid ${isOld ? "#4a3a1a" : "#22232a"}`, opacity: item.remaining===0 ? 0.4 : 1 }}>
+                          border:`1px solid ${isOld ? "#4a3a1a" : isAgeing ? "#3a3a1a" : "#22232a"}`, opacity: item.remaining===0 ? 0.4 : 1 }}>
                           <span style={{ fontSize:22, flexShrink:0 }}>{item.emoji}</span>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:13, color:"#e4ddd0", fontWeight:600,
                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</div>
                             <div style={{ marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                               <ProteinBadge protein={item.protein} />
-                              {isOld && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
+                              {isOld    && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
                                 border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
                                 fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays}d gammel</span>}
+                              {isAgeing && <span style={{ fontSize:9, color:"#a89848", background:"#22220a",
+                                border:"1px solid #3a3a1a", borderRadius:6, padding:"1px 6px",
+                                fontFamily:"sans-serif", fontWeight:600 }}>{ageDays}d</span>}
                               {dislikedMeals.includes(item.name) && <span style={{ fontSize:9, color:"#d47070", background:"#2a1a1a",
                                 border:"1px solid #3a2a2a", borderRadius:6, padding:"1px 6px",
                                 fontFamily:"sans-serif", fontWeight:600 }}>👎 Likt ikke</span>}
@@ -2112,8 +2124,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               <span style={{ fontSize:12, fontFamily:"sans-serif", color:"#b4b2c2",
                                 minWidth:48, textAlign:"center" }}>{item.remaining}/{item.total}</span>
                               <button onClick={()=>setFreezerItems(prev=>prev.map(i=>i.id===item.id?{...i,remaining:Math.min(i.total,i.remaining+1)}:i))}
+                                disabled={item.remaining >= item.total}
                                 style={{ width:28, height:28, borderRadius:6, border:"1px solid #2a2b30",
-                                  background:"#141517", color:"#e4ddd0", cursor:"pointer",
+                                  background:"#141517", color: item.remaining >= item.total ? "#3a3b40" : "#e4ddd0",
+                                  cursor: item.remaining >= item.total ? "default" : "pointer",
                                   fontSize:16, fontFamily:"sans-serif", lineHeight:1 }}>+</button>
                             </div>
                           )}
