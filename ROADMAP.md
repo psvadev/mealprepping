@@ -16,22 +16,12 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 **OAuth scope:** `https://www.googleapis.com/auth/drive.file` — grants access only to files the app itself created, nothing else in the user's Drive.  
 **Complexity:** ~200–300 lines. Needs a Google Cloud project with the Drive API enabled and an OAuth client ID (free, does not expire, no per-use cost).
 
-### Skriv ut button — style as action, not nav tab
-The print button sits in the nav row but looks identical to view tabs (Plan, Handleliste, Fryser, Innstillinger). It should be visually distinct — ghost/outline style — to signal it's an action, not a destination.
-
-### Shopping list — mobile week auto-scroll
-On mobile, tapping "Handleliste" in the bottom nav jumps to the shopping view for `shoppingWeek`. If the shopping list hasn't been generated yet, the view is empty. A small "Generer handleliste" CTA when the list is missing would smooth this flow.
-
 ### Freezer — edit item name / emoji
 Currently, freezer items inherit the meal name and emoji from the plan and can't be edited. A tap-to-edit would let users correct AI-generated names before they become permanent in the log.
 
 ---
 
 ## Medium-term (moderate complexity, still single-file)
-
-### Nutritional targets
-Weekly nutrition summary already shows calories/protein/fat/carbs/fibre. A next step would be letting users set per-week targets (e.g. 2000 kcal/day) and showing progress bars or colour indicators against them.
-**Deferred to SaaS** — proper targets are highly individual (age, sex, weight, goals). A shared family tool has no natural owner for the targets. In a SaaS context with user profiles, a TDEE calculator per user becomes a real feature; here it's just noise.
 
 ### Leftover handling improvements
 Currently "leftover" is a freeform concept. A structured leftovers system could let users mark a freezer meal as "also provides lunch" and track that separately, reducing manual portion math.
@@ -51,3 +41,4 @@ Would require: backend (auth, user data storage), billing, API key management on
 - **Barcode scanning** — pantry management via camera. Interesting but well outside scope.
 - **Recipe import from URLs** — useful but requires CORS workarounds or a proxy.
 - **Multi-provider AI (OpenAI, Gemini, etc.)** — would require abstracting all three prompts behind a provider layer and testing structured JSON output across providers. No user benefit in a personal tool where the API key is yours. More relevant if this ever becomes a SaaS product where the provider choice is hidden from the user.
+- **Nutritional targets** — highly individual (age, sex, weight, goals); no natural owner in a shared family tool. Better suited to a SaaS context with per-user profiles and a TDEE calculator.
