@@ -55,7 +55,7 @@ const MEAL_CATEGORIES = [
 const LEFTOVER_MEAL = { name:"Rester", emoji:"♻️", protein:"leftover", leftover:true, description:"Rester fra en annen dag." };
 
 const CUISINE_LIBRARY = [
-  { key:"norsk",       label:"Norsk/Nordisk",  emoji:"🐟" },
+  { key:"norsk",       label:"Nordisk",        emoji:"🥔" },
   { key:"italiensk",   label:"Italiensk",      emoji:"🍝" },
   { key:"asiatisk",    label:"Asiatisk",       emoji:"🍜" },
   { key:"meksikansk",  label:"Meksikansk",     emoji:"🌮" },
@@ -175,6 +175,39 @@ function CuisineCounter({ cuisine, value, onChange }) {
   );
 }
 
+// ── Google Drive helpers ───────────────────────────────────────────────────
+async function generatePKCE() {
+  const arr = crypto.getRandomValues(new Uint8Array(48));
+  const verifier = btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return { verifier, challenge };
+}
+function getDriveToken() { try { return JSON.parse(localStorage.getItem('mp_driveToken')); } catch { return null; } }
+function setDriveToken(t) { localStorage.setItem('mp_driveToken', JSON.stringify(t)); }
+function getDriveFileId() { return localStorage.getItem('mp_driveFileId') || ''; }
+function setDriveFileId(id) { localStorage.setItem('mp_driveFileId', id); }
+async function getValidAccessToken(clientId) {
+  const t = getDriveToken();
+  if (!t) return null;
+  if (Date.now() < t.expires_at - 60000) return t.access_token;
+  if (!t.refresh_token || !clientId) return null;
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({ grant_type:'refresh_token', refresh_token:t.refresh_token, client_id:clientId })
+    });
+    const d = await res.json();
+    if (d.access_token) {
+      const updated = { ...t, access_token:d.access_token, expires_at: Date.now()+(d.expires_in||3600)*1000 };
+      setDriveToken(updated);
+      return d.access_token;
+    }
+  } catch {}
+  setDriveToken(null);
+  return null;
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────
 function App() {
   // API keys
@@ -228,6 +261,13 @@ function App() {
 
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   const [mobileWeek, setMobileWeek] = useState(0);
+
+  // Google Drive sync state
+  const [googleClientId, setGoogleClientId] = useState(() => lsGet('googleClientId', ''));
+  const [driveStatus,    setDriveStatus]    = useState('idle');
+  const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
+  const [driveConnected, setDriveConnected] = useState(() => !!localStorage.getItem('mp_driveToken'));
+
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 640);
     window.addEventListener('resize', handler);
@@ -235,6 +275,7 @@ function App() {
   }, []);
 
   const importRef = useRef(null);
+  const driveSyncTimer = useRef(null);
 
   // ── Browser back-button support ───────────────────────────────────────────
   useEffect(() => {
@@ -248,6 +289,34 @@ function App() {
     const onPop = (e) => { setView(e.state?.view || 'plan'); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // ── OAuth callback — exchanges ?code= for Drive tokens on redirect back ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+    const verifier = sessionStorage.getItem('drive_pkce_verifier');
+    if (!verifier) return;
+    sessionStorage.removeItem('drive_pkce_verifier');
+    window.history.replaceState({}, '', window.location.pathname);
+    const clientId = lsGet('googleClientId', '');
+    if (!clientId) return;
+    fetch('https://oauth2.googleapis.com/token', {
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        code, client_id: clientId,
+        redirect_uri: window.location.origin + window.location.pathname,
+        grant_type: 'authorization_code', code_verifier: verifier
+      })
+    }).then(r => r.json()).then(data => {
+      if (data.access_token) {
+        setDriveToken({ access_token: data.access_token, refresh_token: data.refresh_token,
+          expires_at: Date.now() + (data.expires_in || 3600) * 1000 });
+        setDriveConnected(true);
+        lsSet('pendingDriveLoad', true);
+      }
+    }).catch(() => {});
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
@@ -273,6 +342,8 @@ function App() {
   useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
   useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
   useEffect(() => lsSet('checkedItems',     checkedItems),     [checkedItems]);
+  useEffect(() => lsSet('googleClientId',   googleClientId),   [googleClientId]);
+  useEffect(() => lsSet('driveSyncedAt',    driveSyncedAt),    [driveSyncedAt]);
 
   // Sync note draft when modal opens
   useEffect(() => {
@@ -456,14 +527,14 @@ function App() {
         headers: anthropicHeaders,
         body: JSON.stringify({
           model:"claude-sonnet-4-6",
-          max_tokens:1500,
-          system:"Du er en kokk-assistent. Bruk norsk bokmål. Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.",
+          max_tokens:2000,
+          system:"Du er en kokk-assistent. Bruk ALLTID norsk bokmål — aldri nynorsk eller dialektformer (f.eks. \"kokosmelk\" ikke \"kokosmjølk\", \"melk\" ikke \"mjølk\"). Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON. JSON-svaret MÅ alltid inkludere feltet \"portionWeightGrams\" med estimert totalvekt per porsjon i gram.",
           messages:[{
             role:"user",
             content:`Svar alltid på norsk bokmål.\n\nGi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
-              : "Bruk metriske mål (gram, kg, dl, ml, liter)."
-            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan retten best pakkes og fryses, og hvordan den varmes opp best (ovn, mikro, panne med litt vann osv.). Unngå tips om ferske sider, ingredienser som tilberedes ved servering, eller noe som lages "i forveien" – alt skjer på batch-dagen. Vær spesifikk per rett.\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Sausen kan lages 3–4 dager i forveien og fryses i porsjonsbokser.", "Kok pasta ferskt rett før servering — tar kun 10 min."]\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
+              : "Bruk norske måleenheter og forkortelser: g, kg, dl, ml, l, ss (spiseskje), ts (teskje), stk, klype, neve."
+            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan akkurat denne retten best pakkes og fryses, og hvordan den varmes opp best. Vær eksplisitt på oppvarmingsmetode: retter med sprø overflate (ovnsretter, gratenger, panerte retter) bør ovn anbefales — ikke mikrobølgeovn. Supper, gryter og sauser varmes fint i mikro eller kjele. Vær spesifikk for retten — unngå generiske råd som "frys i porsjonsbokser". Unngå tips om ferske sider eller noe som lages ved servering – alt skjer på batch-dagen. Estimer også total porsjonsvekt i gram (inkl. saus/kraft) og legg i "portionWeightGrams". Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg).\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "portionWeightGrams": 420,\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Frys i flate bokser — da tiner det jevnt.", "Varm i ovn på 180°C i 15 min for sprø topp — mikro gjør bunnen seig."]\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
           }]
         })
       });
@@ -616,10 +687,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
-            content:`Svar alltid på norsk bokmål.\n\nLag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i kategorier. Skaler mengder til ${portions} porsjoner per rett. For hver ingrediens: bruk en totalrad med ingrediensnavn og samlet mengde. Du MÅ alltid legge til en "items"-liste for alle ingredienser som brukes i mer enn én rett — ingen unntak. Hvert element i "items" viser rettens navn og mengden til den retten. Generiske basisingredienser som løk, hvitløk, ingefær, chili, gulrot, selleri, lime, sitron og ferske urter trenger ikke underrader — bare totalrad. Eksempel på struktur:\n[{ "name": "Kyllingfileter", "amount": "2.4 kg", "items": [{ "name": "Thai gryte", "amount": "1.3 kg" }, { "name": "Chicken adobo", "amount": "1.1 kg" }] }, { "name": "Løk", "amount": "9 stk" }] ${units === 'imperial'
+            content:`Svar alltid på norsk bokmål — aldri nynorsk eller dialektformer i ingrediensnavn (f.eks. "kokosmelk" ikke "kokosmjølk", "melk" ikke "mjølk").\n\nLag en handleliste for uke ${week+1}. Hver rett skal gi ${portions} porsjoner:\n${plannedMeals.map((m,i)=>`${i+1}. ${m}`).join("\n")}\n\nGrupper ingrediensene i disse faste kategoriene (bruk kun disse, velg de som er relevante):\n🥩 Kjøtt og fisk\n🥦 Frukt og grønt\n🧀 Meieri og egg\n🥫 Hermetikk og boksvarer\n🌾 Tørrvarer\n🍞 Brød og bakevarer\n❄️ Fryst\n🫙 Sauser og krydder\n🧂 Har du dette hjemme? Skaler mengder til ${portions} porsjoner per rett. Ingrediensnavn skal være korte og enkle — bare produktnavnet og evt. relevant produktspesifikasjon som fettinnhold (f.eks. "Matfløte 35%", "Lettrømme") eller form (f.eks. "fersk", "frossen", "på boks"). Ikke ta med markedsføringsspråk som "økologisk", "uten konserveringsmidler", "naturlig" eller alternative varianter i parentes. Eksempel: "Grønn pesto" ikke "Grønn pesto (fersk eller på glass, uten konserveringsmidler)". For hver ingrediens: bruk en totalrad med ingrediensnavn og samlet mengde. Du MÅ alltid legge til en "items"-liste for alle ingredienser som brukes i mer enn én rett — ingen unntak. Hvert element i "items" viser rettens navn og mengden til den retten. Generiske basisingredienser som løk, hvitløk, ingefær, chili, gulrot, selleri, lime, sitron og ferske urter trenger ikke underrader — bare totalrad. Eksempel på struktur:\n[{ "name": "Kyllingfileter", "amount": "2.4 kg", "items": [{ "name": "Thai gryte", "amount": "1.3 kg" }, { "name": "Chicken adobo", "amount": "1.1 kg" }] }, { "name": "Løk", "amount": "9 stk" }] ${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
-              : "Bruk metriske mål (gram, kg, dl, mil, liter)."
-            } Inkluder prisestimat per kategori og totalt, basert på norske butikkpriser.\n\nLangtidsholdbare basisvarer som sjelden må kjøpes (salt, pepper, krydder, olje, eddik, soyasaus, mel, sukker, tørket pasta, ris, hermetikk, buljong, tomatpuré, honning, sennep o.l.) skal samles i én egen kategori kalt "Har du dette hjemme?" med emoji 🧂. Ikke ta med pris for denne kategorien. Alle andre ingredienser som bør kjøpes fersk denne uken legges i vanlige kategorier.\n\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "price": { "low": 120, "high": 160 },\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    },\n    {\n      "name": "Har du dette hjemme?",\n      "emoji": "🧂",\n      "items": [{ "name": "Salt", "amount": "" }, { "name": "Olivenolje", "amount": "litt" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
+              : "Bruk norske måleenheter og forkortelser: g, kg, dl, ml, l, ss (spiseskje), ts (teskje), stk, klype, neve."
+            } Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg). Inkluder prisestimat per kategori og totalt, basert på norske butikkpriser.\n\nLangtidsholdbare basisvarer som sjelden må kjøpes (salt, pepper, krydder, olje, eddik, soyasaus, mel, sukker, tørket pasta, ris, hermetikk, buljong, tomatpuré, honning, sennep o.l.) skal samles i én egen kategori kalt "Har du dette hjemme?" med emoji 🧂. Ikke ta med pris for denne kategorien. Alle andre ingredienser som bør kjøpes fersk denne uken legges i vanlige kategorier.\n\nSvar med dette JSON-formatet:\n{\n  "categories": [\n    {\n      "name": "Kjøtt og fisk",\n      "emoji": "🥩",\n      "price": { "low": 120, "high": 160 },\n      "items": [{ "name": "Kyllingfileter", "amount": "1.2 kg" }]\n    },\n    {\n      "name": "Har du dette hjemme?",\n      "emoji": "🧂",\n      "items": [{ "name": "Salt", "amount": "" }, { "name": "Olivenolje", "amount": "litt" }]\n    }\n  ],\n  "totalPrice": { "low": 450, "high": 620 }\n}`
           }]
         })
       });
@@ -698,6 +769,129 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       : "";
     downloadFile(header+lines+price, `handleliste-uke${shoppingWeek+1}.txt`, 'text/plain;charset=utf-8');
   };
+
+  // ── Google Drive sync ────────────────────────────────────────────────────
+  const saveToDrive = useCallback(async (data) => {
+    const token = await getValidAccessToken(googleClientId);
+    if (!token) return;
+    setDriveStatus('syncing');
+    const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
+    const fileId = getDriveFileId();
+    try {
+      let res;
+      if (fileId) {
+        res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+          method:'PATCH', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' }, body:blob
+        });
+        if (res.status === 404) { setDriveFileId(''); setDriveStatus('error'); return; }
+      } else {
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify({ name:'reheat-and-eat-backup.json', mimeType:'application/json' })], { type:'application/json' }));
+        form.append('file', blob);
+        res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method:'POST', headers:{ Authorization:`Bearer ${token}` }, body:form
+        });
+        const d = await res.json();
+        if (d.id) setDriveFileId(d.id);
+      }
+      if (res.ok) {
+        const now = new Date().toISOString();
+        setDriveSyncedAt(now); lsSet('driveSyncedAt', now);
+        setDriveStatus('synced');
+      } else { setDriveStatus('error'); }
+    } catch { setDriveStatus('error'); }
+  }, [googleClientId]);
+
+  const loadFromDrive = useCallback(async () => {
+    const token = await getValidAccessToken(googleClientId);
+    if (!token) return;
+    setDriveStatus('syncing');
+    try {
+      let fileId = getDriveFileId();
+      if (!fileId) {
+        const s = await fetch(`https://www.googleapis.com/drive/v3/files?q=name%3D'reheat-and-eat-backup.json'&spaces=drive&fields=files(id)`,
+          { headers:{ Authorization:`Bearer ${token}` } });
+        const sd = await s.json();
+        fileId = sd.files?.[0]?.id || '';
+        if (fileId) setDriveFileId(fileId);
+      }
+      if (!fileId) { setDriveStatus('idle'); return; }
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers:{ Authorization:`Bearer ${token}` } });
+      if (!res.ok) { setDriveStatus('error'); return; }
+      const d = await res.json();
+      if (d.plan) setPlan(d.plan);
+      if (d.weeks) setWeeks(d.weeks);
+      if (d.portions) setPortions(d.portions);
+      if (d.suggestions) setSuggestions(d.suggestions);
+      if (d.proteinTargets) setProteinTargets(d.proteinTargets);
+      if (d.maxTime) setMaxTime(d.maxTime);
+      if (d.exclusions !== undefined) setExclusions(d.exclusions);
+      if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
+      if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
+      if (d.units) setUnits(d.units);
+      if (d.shoppingLists) setShoppingLists(d.shoppingLists);
+      if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
+      if (d.favourites) setFavourites(d.favourites);
+      if (d.mealNotes) setMealNotes(d.mealNotes);
+      if (d.mealHistory) setMealHistory(d.mealHistory);
+      if (d.freezerItems) setFreezerItems(d.freezerItems);
+      if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
+      const now = new Date().toISOString();
+      setDriveSyncedAt(now); lsSet('driveSyncedAt', now);
+      setDriveStatus('synced');
+    } catch { setDriveStatus('error'); }
+  }, [googleClientId]);
+
+  const connectGoogleDrive = useCallback(async () => {
+    if (!googleClientId) return;
+    const { verifier, challenge } = await generatePKCE();
+    sessionStorage.setItem('drive_pkce_verifier', verifier);
+    const params = new URLSearchParams({
+      client_id: googleClientId,
+      redirect_uri: window.location.origin + window.location.pathname,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      access_type: 'offline',
+      prompt: 'consent'
+    });
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  }, [googleClientId]);
+
+  const disconnectGoogleDrive = useCallback(() => {
+    localStorage.removeItem('mp_driveToken');
+    localStorage.removeItem('mp_driveFileId');
+    setDriveConnected(false);
+    setDriveStatus('idle');
+    setDriveSyncedAt(null);
+  }, []);
+
+  // Load from Drive on startup if already connected
+  useEffect(() => {
+    if (driveConnected) loadFromDrive();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load after OAuth redirect (pendingDriveLoad flag avoids stale closure)
+  useEffect(() => {
+    if (driveConnected && lsGet('pendingDriveLoad', false)) {
+      lsSet('pendingDriveLoad', false);
+      loadFromDrive();
+    }
+  }, [driveConnected, loadFromDrive]);
+
+  // Auto-save to Drive 2 s after any key state change
+  useEffect(() => {
+    if (!driveConnected) return;
+    clearTimeout(driveSyncTimer.current);
+    driveSyncTimer.current = setTimeout(() => {
+      saveToDrive({ plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions,
+        cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, favourites,
+        mealNotes, mealHistory, freezerItems, dislikedMeals });
+    }, 2000);
+    return () => clearTimeout(driveSyncTimer.current);
+  }, [plan, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, driveConnected]);
 
   const printPlan = () => {
     const rows = Array.from({length:weeks},(_,w) => {
@@ -1536,6 +1730,69 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               </div>
             </div>
 
+            {/* Google Drive sync */}
+            <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
+              padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                letterSpacing:"0.5px", fontWeight:600, marginBottom:16 }}>GOOGLE DRIVE SYNC</div>
+
+              <div style={{ marginBottom:12 }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>OAuth klient-ID</label>
+                  <span style={{ fontSize:11, fontFamily:"sans-serif",
+                    color: driveConnected ? "#7abf7a" : "#747280" }}>
+                    {driveConnected ? "✓ Tilkoblet" : "Ikke tilkoblet"}
+                  </span>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input type="password" value={googleClientId} onChange={e=>setGoogleClientId(e.target.value)}
+                    placeholder="……apps.googleusercontent.com"
+                    disabled={driveConnected}
+                    style={{ flex:1, background:"#141517", border:`1px solid ${driveConnected?"#2a3a2a":"#2a2b30"}`,
+                      borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"monospace", fontSize:12,
+                      opacity: driveConnected ? 0.6 : 1 }} />
+                </div>
+              </div>
+
+              {!driveConnected ? (
+                <button onClick={connectGoogleDrive} disabled={!googleClientId}
+                  style={{ padding:"8px 16px", borderRadius:6,
+                    border: googleClientId ? "1px solid #e8a838" : "1px solid #2a2b30",
+                    background: googleClientId ? "#e8a83822" : "transparent",
+                    color: googleClientId ? "#e8a838" : "#747280",
+                    cursor: googleClientId ? "pointer" : "default",
+                    fontSize:13, fontFamily:"sans-serif" }}>
+                  Koble til Google Drive
+                </button>
+              ) : (
+                <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>
+                    {driveStatus === 'syncing' && "↻ Synkroniserer…"}
+                    {driveStatus === 'synced' && driveSyncedAt && `✓ Synkronisert ${new Date(driveSyncedAt).toLocaleTimeString("nb-NO",{hour:"2-digit",minute:"2-digit"})}`}
+                    {driveStatus === 'error' && <span style={{ color:"#e87a38" }}>⚠ Synkroniseringsfeil</span>}
+                    {driveStatus === 'idle' && "Venter på endringer…"}
+                  </span>
+                  <button onClick={() => loadFromDrive()} style={{ padding:"5px 12px", borderRadius:6,
+                    border:"1px solid #2a2b30", background:"transparent",
+                    color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                    Last inn nå
+                  </button>
+                  <button onClick={disconnectGoogleDrive} style={{ padding:"5px 12px", borderRadius:6,
+                    border:"1px solid #2a2b30", background:"transparent",
+                    color:"#747280", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                    Koble fra
+                  </button>
+                </div>
+              )}
+
+              <div style={{ marginTop:10, fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
+                Synkroniserer plan, fryser og favoritter mellom enheter. Opprett OAuth-klient-ID gratis på{" "}
+                <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer"
+                  style={{ color:"#e8a838" }}>console.cloud.google.com</a>.
+                Lim inn samme klient-ID på alle enheter i husstanden.
+              </div>
+            </div>
+
             {/* Defaults */}
             <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10,
               padding:"18px 20px", marginBottom:14 }}>
@@ -2000,6 +2257,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               <span style={{ fontSize:12, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
                             </div>
                           ))}
+                          {recipe.portionWeightGrams && (
+                            <div style={{ display:"flex", justifyContent:"space-between",
+                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
+                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Porsjonsvekt</span>
+                              <span style={{ fontSize:12, fontWeight:700, color:"#b4b2c2", fontFamily:"sans-serif" }}>ca. {recipe.portionWeightGrams} g</span>
+                            </div>
+                          )}
                           {recipe.pricePerPortion && (
                             <div style={{ display:"flex", justifyContent:"space-between",
                               alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
@@ -2132,7 +2396,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   {recipe.nutrition && (
                     <div style={{ borderTop:"1px solid #22232a", paddingTop:14, marginBottom:14 }}>
                       <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                        letterSpacing:"0.8px", marginBottom:10, fontWeight:600 }}>NÆRING PER PORSJON</div>
+                        letterSpacing:"0.8px", marginBottom:10, fontWeight:600 }}>
+                        NÆRING PER PORSJON{recipe.portionWeightGrams ? <span style={{ fontWeight:400, color:"#747280", marginLeft:6 }}>· ca. {recipe.portionWeightGrams} g</span> : null}
+                      </div>
                       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                         {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${recipe.nutrition[f.key]}${f.unit}`, color:f.color})).map(n => (
                           <div key={n.label} style={{ flex:"1 1 90px", display:"flex", flexDirection:"column",
