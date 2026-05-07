@@ -8,6 +8,13 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 
 ## Near-term (fits current architecture)
 
+### Google Drive sync
+**Goal:** share plan state between desktop planning and phone (in-store shopping, freezer checks).  
+**Approach:** OAuth2 PKCE flow in the browser → Google Drive API v3. Save/load a single `mealprepping-backup.json` file in the user's Drive. No backend needed — the OAuth redirect can target `localhost:8080` (local) or the GitHub Pages URL.  
+**Scope:** Export and import are already built. Drive sync is essentially "auto-export on change, auto-import on load" with a Google identity layer on top.  
+**Setup:** one-time per device — enter Google OAuth client ID in Innstillinger, click "Koble til Google Drive", log in via Google popup. After that sync is silent and automatic.  
+**Complexity:** ~200–300 lines. Needs a Google Cloud project with the Drive API enabled and an OAuth client ID (free, does not expire, no per-use cost).
+
 ### Skriv ut button — style as action, not nav tab
 The print button sits in the nav row but looks identical to view tabs (Plan, Handleliste, Fryser, Innstillinger). It should be visually distinct — ghost/outline style — to signal it's an action, not a destination.
 
@@ -20,12 +27,6 @@ Currently, freezer items inherit the meal name and emoji from the plan and can't
 ---
 
 ## Medium-term (moderate complexity, still single-file)
-
-### Google Drive sync
-**Goal:** share plan state between desktop planning and phone (in-store shopping, freezer checks).  
-**Approach:** OAuth2 PKCE flow in the browser → Google Drive API v3. Save/load a single `mealprepping-backup.json` file in the user's Drive. No backend needed — the OAuth redirect can target `localhost:8080`.  
-**Scope:** Export and import are already built. Drive sync is essentially "auto-export on change, auto-import on load" with a Google identity layer on top.  
-**Complexity:** ~200–300 lines. Needs a Google Cloud project with the Drive API enabled and an OAuth client ID (free). The client ID would be stored in Innstillinger alongside the API keys.
 
 ### Nutritional targets
 Weekly nutrition summary already shows calories/protein/fat/carbs/fibre. A next step would be letting users set per-week targets (e.g. 2000 kcal/day) and showing progress bars or colour indicators against them.
