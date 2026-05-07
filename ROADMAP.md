@@ -13,6 +13,7 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 **Approach:** OAuth2 PKCE flow in the browser → Google Drive API v3. Save/load a single `mealprepping-backup.json` file in the user's Drive. No backend needed — the OAuth redirect can target `localhost:8080` (local) or the GitHub Pages URL.  
 **Scope:** Export and import are already built. Drive sync is essentially "auto-export on change, auto-import on load" with a Google identity layer on top.  
 **Setup:** one-time per device — enter Google OAuth client ID in Innstillinger, click "Koble til Google Drive", log in via Google popup. After that sync is silent and automatic.  
+**OAuth scope:** `https://www.googleapis.com/auth/drive.file` — grants access only to files the app itself created, nothing else in the user's Drive.  
 **Complexity:** ~200–300 lines. Needs a Google Cloud project with the Drive API enabled and an OAuth client ID (free, does not expire, no per-use cost).
 
 ### Skriv ut button — style as action, not nav tab
