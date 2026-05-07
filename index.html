@@ -2051,12 +2051,24 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     (groups[item.cookedAt] = groups[item.cookedAt] || []).push(item);
                     return groups;
                   }, {})
-                ).sort(([a],[b]) => b.localeCompare(a)).map(([date, items]) => (
+                ).sort(([a],[b]) => b.localeCompare(a)).map(([date, items]) => {
+                    const ageDays  = Math.floor((Date.now() - new Date(date+'T12:00:00').getTime()) / 86400000);
+                    const isOld    = ageDays >= 90;
+                    const isAgeing = ageDays >= 60 && ageDays < 90;
+                    return (
                   <div key={date}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                      <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
-                        letterSpacing:"0.8px", fontWeight:600 }}>
-                        LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
+                          letterSpacing:"0.8px", fontWeight:600 }}>
+                          LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
+                        </div>
+                        {isOld    && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
+                          border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
+                          fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays} {ageDays === 1 ? "dag" : "dager"} gammel</span>}
+                        {isAgeing && <span style={{ fontSize:9, color:"#c8b84a", background:"#2a2610",
+                          border:"1px solid #4a4420", borderRadius:6, padding:"1px 8px",
+                          fontFamily:"sans-serif", fontWeight:600 }}>⏰ {ageDays} {ageDays === 1 ? "dag" : "dager"} · bruk snart</span>}
                       </div>
                       <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date))}
                         style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #3a2a2a",
@@ -2065,25 +2077,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                       {items.map(item => {
-                        const ageDays  = Math.floor((Date.now() - new Date(item.cookedAt+'T12:00:00').getTime()) / 86400000);
-                        const isOld    = ageDays >= 90;
-                        const isAgeing = ageDays >= 60 && ageDays < 90;
                         return (
                         <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10,
                           padding:"10px 14px", background:"#18191c", borderRadius:9,
-                          border:`1px solid ${isOld ? "#4a3a1a" : isAgeing ? "#3a3a1a" : "#22232a"}`, opacity: item.remaining===0 ? 0.4 : 1 }}>
+                          border:"1px solid #22232a", opacity: item.remaining===0 ? 0.4 : 1 }}>
                           <span style={{ fontSize:22, flexShrink:0 }}>{item.emoji}</span>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:13, color:"#e4ddd0", fontWeight:600,
                               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.name}</div>
                             <div style={{ marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                               <ProteinBadge protein={item.protein} />
-                              {isOld    && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
-                                border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
-                                fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays}d gammel</span>}
-                              {isAgeing && <span style={{ fontSize:9, color:"#a89848", background:"#22220a",
-                                border:"1px solid #3a3a1a", borderRadius:6, padding:"1px 6px",
-                                fontFamily:"sans-serif", fontWeight:600 }}>{ageDays}d</span>}
                               {dislikedMeals.includes(item.name) && <span style={{ fontSize:9, color:"#d47070", background:"#2a1a1a",
                                 border:"1px solid #3a2a2a", borderRadius:6, padding:"1px 6px",
                                 fontFamily:"sans-serif", fontWeight:600 }}>👎 Likt ikke</span>}
@@ -2139,7 +2142,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       ); })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
