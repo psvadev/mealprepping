@@ -31,6 +31,7 @@ Currently, freezer items inherit the meal name and emoji from the plan and can't
 
 ### Nutritional targets
 Weekly nutrition summary already shows calories/protein/fat/carbs/fibre. A next step would be letting users set per-week targets (e.g. 2000 kcal/day) and showing progress bars or colour indicators against them.
+**Deferred to SaaS** — proper targets are highly individual (age, sex, weight, goals). A shared family tool has no natural owner for the targets. In a SaaS context with user profiles, a TDEE calculator per user becomes a real feature; here it's just noise.
 
 ### Leftover handling improvements
 Currently "leftover" is a freeform concept. A structured leftovers system could let users mark a freezer meal as "also provides lunch" and track that separately, reducing manual portion math.
