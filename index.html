@@ -720,8 +720,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   // ── Export / import ───────────────────────────────────────────────────────
   const exportPlan = () => {
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
-      cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, favourites, mealNotes,
-      mealHistory, freezerItems, dislikedMeals, exportedAt: new Date().toISOString() };
+      cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
+      favourites, mealNotes, mealHistory, freezerItems, dislikedMeals, exportedAt: new Date().toISOString() };
     const date = new Date().toISOString().split('T')[0];
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
   };
@@ -743,6 +743,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
         if (d.units) setUnits(d.units);
         if (d.shoppingLists) setShoppingLists(d.shoppingLists);
+        if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
         if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
         if (d.favourites) setFavourites(d.favourites);
         if (d.mealNotes) setMealNotes(d.mealNotes);

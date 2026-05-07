@@ -49,3 +49,4 @@ Would require: backend (auth, user data storage), billing, API key management on
 - **Per-day prep tracking** — conflicts with the batch-cook philosophy. Everything is cooked on one day; tracking per-day prep adds complexity for no gain.
 - **Barcode scanning** — pantry management via camera. Interesting but well outside scope.
 - **Recipe import from URLs** — useful but requires CORS workarounds or a proxy.
+- **Multi-provider AI (OpenAI, Gemini, etc.)** — would require abstracting all three prompts behind a provider layer and testing structured JSON output across providers. No user benefit in a personal tool where the API key is yours. More relevant if this ever becomes a SaaS product where the provider choice is hidden from the user.
