@@ -1645,12 +1645,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                   fontWeight: item.items?.length ? 600 : 400,
                                   textDecoration: checked ? "line-through" : "none" }}>{item.name}</span>
                                 <span style={{ fontSize:11, color: checked ? "#747280" : "#b8b0a8", fontFamily:"sans-serif",
-                                  marginLeft:8, textDecoration: checked ? "line-through" : "none" }}>{item.amount}</span>
+                                  marginLeft:8, flexShrink:0, whiteSpace:"nowrap", textDecoration: checked ? "line-through" : "none" }}>{item.amount}</span>
                               </div>
                               {!checked && item.items?.map((sub,k) => (
                                 <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", paddingLeft:12, marginTop:2 }}>
                                   <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>{sub.name}</span>
-                                  <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginLeft:8 }}>{sub.amount}</span>
+                                  <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif", marginLeft:8, flexShrink:0, whiteSpace:"nowrap" }}>{sub.amount}</span>
                                 </div>
                               ))}
                             </li>
