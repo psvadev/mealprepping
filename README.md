@@ -27,6 +27,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Shopping list check-off** — tap items while shopping to strike them through; progress persists across page refreshes and clears when the list is regenerated
 - **Batch & freeze tips** — each recipe includes 1–3 AI-generated tips on how to pack, freeze, and reheat the dish
 - **Export / import** — save and restore the full plan as JSON; export shopping list as `.txt`
+- **Mobile layout** — responsive design for phones (< 640px): bottom nav bar, compact header, one-week-at-a-time plan grid; desktop controls hidden on mobile
 
 ---
 

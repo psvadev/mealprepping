@@ -199,6 +199,27 @@ The active unit is injected as a sentence into the `fetchRecipe` and `generateSh
 
 ---
 
+## Mobile layout
+
+Breakpoint: `window.innerWidth < 640` — tracked in `isMobile` state with a `resize` listener.
+
+**On mobile (< 640px):**
+- Header controls row hidden entirely (UKE, PORSJONER, Proteinmål, Kjøkken, Maks tid, Skriv ut)
+- Compact header padding (`12px 16px 10px`)
+- Week selector shown in header when `weeks > 1` — buttons 1…N set `mobileWeek` (plan view) and `shoppingWeek` (shopping view) together
+- Plan grid renders only the `mobileWeek` row instead of all weeks
+- Fixed bottom nav bar (`height: 56px`, `zIndex: 200`) with four tabs: Plan / Handleliste / Fryser / Innstillinger
+- Main content has `paddingBottom: 72px` to clear the bottom nav bar
+- No `zoom: 1.1`
+
+**On desktop (≥ 640px):**
+- Full header with all controls and top nav tabs
+- All weeks rendered in the plan grid
+- `zoom: 1.1` applied via `@media (min-width: 640px)`
+- Bottom nav bar not rendered
+
+---
+
 ## Styling
 
 Dark neutral slate: `#0e0f11` background, `#18191c` cards, `#141517` inset areas, `#22232a`/`#2a2b30` borders.
@@ -206,10 +227,11 @@ Warm amber accent: `#e8a838` for active states, buttons, highlights.
 Text: primary `#e4ddd0`, secondary `#b4b2c2`, muted `#747280`.
 Font: `'Georgia', 'Times New Roman', serif` for headings/body; `sans-serif` for UI labels and data.
 All layout via inline styles — no CSS classes except global resets and scrollbar styling.
-Mobile friendly via `flexWrap` and `auto-fill` grid columns.
-`zoom: 1.1` on `body` — bakes in 110% browser zoom for comfortable reading at high-DPI resolutions.
+Mobile friendly via `flexWrap`, `auto-fill` grid columns, and a dedicated mobile layout at `< 640px`.
+`zoom: 1.1` is restricted to `@media (min-width: 640px)` — not applied on phones.
 Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length. `maxWidth` on the main container and header is 1400px (up from 1000px) to better utilise wide screens.
 Grid rows use equal-height cells: `<td>` has `height: "1px"` (table layout trick meaning "fill the row") and the inner div uses `height: "100%"` so all cells in a row stretch to match the tallest.
+Plan grid table has `minWidth: 560px` so it scrolls horizontally on narrow screens rather than squashing columns.
 
 ---
 
