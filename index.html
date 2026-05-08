@@ -295,9 +295,9 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (!code) return;
-    const verifier = sessionStorage.getItem('drive_pkce_verifier');
+    const verifier = localStorage.getItem('drive_pkce_verifier');
     if (!verifier) return;
-    sessionStorage.removeItem('drive_pkce_verifier');
+    localStorage.removeItem('drive_pkce_verifier');
     window.history.replaceState({}, '', window.location.pathname);
     const clientId     = lsGet('googleClientId', '');
     const clientSecret = lsGet('googleClientSecret', '');
@@ -887,7 +887,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   const connectGoogleDrive = useCallback(async () => {
     if (!googleClientId || !googleClientSecret) return;
     const { verifier, challenge } = await generatePKCE();
-    sessionStorage.setItem('drive_pkce_verifier', verifier);
+    localStorage.setItem('drive_pkce_verifier', verifier);
     const params = new URLSearchParams({
       client_id: googleClientId,
       redirect_uri: window.location.origin + window.location.pathname,
