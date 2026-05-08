@@ -199,6 +199,10 @@ async function getValidAccessToken(clientId, clientSecret) {
       lsSet('driveToken', updated);
       return d.access_token;
     }
+    if (d.error === 'invalid_grant') {
+      lsSet('driveToken', null);
+      return 'TOKEN_EXPIRED';
+    }
   } catch {}
   lsSet('driveToken', null);
   return null;
@@ -817,6 +821,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   // ── Google Drive sync ────────────────────────────────────────────────────
   const saveToDrive = useCallback(async (data) => {
     const token = await getValidAccessToken(googleClientId, googleClientSecret);
+    if (token === 'TOKEN_EXPIRED') { setDriveConnected(false); setDriveStatus('expired'); return; }
     if (!token) return;
     setDriveStatus('syncing');
     const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
@@ -847,6 +852,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
   const loadFromDrive = useCallback(async () => {
     const token = await getValidAccessToken(googleClientId, googleClientSecret);
+    if (token === 'TOKEN_EXPIRED') { setDriveConnected(false); setDriveStatus('expired'); return; }
     if (!token) return;
     setDriveStatus('syncing');
     try {
@@ -902,7 +908,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   }, [googleClientId]);
 
-  const disconnectGoogleDrive = useCallback(() => {
+  const disconnectGoogleDrive = useCallback(async () => {
+    const t = lsGet('driveToken', null);
+    if (t) {
+      const token = t.access_token || t.refresh_token;
+      if (token) {
+        try { await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method:'POST' }); } catch {}
+      }
+    }
     localStorage.removeItem('mp_driveToken');
     localStorage.removeItem('mp_driveFileId');
     setDriveConnected(false);
@@ -1827,6 +1840,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               </div>
 
               {!driveConnected ? (
+                <div>
+                {driveStatus === 'expired' && <p style={{ margin:"0 0 8px", fontSize:12, color:"#e87a38", fontFamily:"sans-serif" }}>⚠ Google-tilkoblingen er utløpt. Koble til på nytt.</p>}
                 <button onClick={connectGoogleDrive} disabled={!googleClientId || !googleClientSecret}
                   style={{ padding:"8px 16px", borderRadius:6,
                     border: (googleClientId && googleClientSecret) ? "1px solid #e8a838" : "1px solid #2a2b30",
@@ -1836,6 +1851,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     fontSize:13, fontFamily:"sans-serif" }}>
                   Koble til Google Drive
                 </button>
+                </div>
               ) : (
                 <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                   <span style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>
