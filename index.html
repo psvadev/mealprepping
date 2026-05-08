@@ -317,9 +317,10 @@ function App() {
         lsSet('pendingDriveLoad', true);
       } else {
         console.error('Drive token exchange failed:', data);
+        setError(`Google Drive-feil: ${data.error} — ${data.error_description || ''}`);
         setDriveStatus('error');
       }
-    }).catch(e => { console.error('Drive token exchange error:', e); setDriveStatus('error'); });
+    }).catch(e => { console.error('Drive token exchange error:', e); setError(`Google Drive-nettverksfeil: ${e.message}`); setDriveStatus('error'); });
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
