@@ -215,6 +215,8 @@ function App() {
   const [portions,    setPortions]    = useState(() => lsGet('portions', 4));
   const [plan,        setPlan]        = useState(() => lsGet('plan', Array.from({length:4},()=>Array(7).fill(null))));
   const [suggestions, setSuggestions] = useState(() => lsGet('suggestions', []));
+  const [manualInput,   setManualInput]   = useState('');
+  const [manualLoading, setManualLoading] = useState(false);
   const [favourites,  setFavourites]  = useState(() => lsGet('favourites', []));
   const [freezerItems,setFreezerItems]= useState(() => lsGet('freezerItems', []));
   const [dislikedMeals,setDislikedMeals]=useState(() => lsGet('dislikedMeals', []));
@@ -565,6 +567,29 @@ function App() {
     if (activeCell) { assignMeal(meal, activeCell.week, activeCell.day); return; }
     setSuggestionModal(meal);
   };
+
+  // ── Add manual meal ───────────────────────────────────────────────────────
+  const addManualMeal = useCallback(async () => {
+    const name = manualInput.trim();
+    if (!name || !anthropicKey) return;
+    setManualLoading(true);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'x-api-key':anthropicKey,
+          'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:256, messages:[{ role:'user', content:
+          `Svar alltid på norsk bokmål.\nGi meg informasjon om denne retten for en batch-cook meal prep-app: "${name}"\nRetten skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt – lag-fra-bunnen gjelder selve retten, ikke hver enkelt ingrediens.\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"name":"Norsk navn","emoji":"🍽","protein":"kylling|fisk|kjott|vegeta","category":"suppe|ovn|gryte|pasta|kjapp|salat|wrap|klassisk","prepTime":"XX min","description":"Kort beskrivelse på 1 setning"}`
+        }] })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const match = text.match(/\{[\s\S]*\}/);
+      const meal = match ? JSON.parse(match[0]) : { name, emoji:'🍽', protein:'kjott', category:'klassisk', prepTime:'30 min', description:'' };
+      setSuggestions(prev => [meal, ...prev.filter(m => m.name !== meal.name)]);
+      setManualInput('');
+    } catch { /* silently ignore — no crash */ } finally { setManualLoading(false); }
+  }, [manualInput, anthropicKey]);
 
   // ── Generate suggestions ──────────────────────────────────────────────────
   const generateSuggestions = useCallback(async () => {
@@ -1488,6 +1513,21 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                   fontSize:12, fontFamily:"sans-serif"
                 }}>✕ Tøm</button>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <input type="text" value={manualInput} onChange={e=>setManualInput(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&!manualLoading&&addManualMeal()}
+                  placeholder="Legg til en rett manuelt…"
+                  style={{ flex:1, background:"#141517", border:"1px solid #2a2b30", borderRadius:7,
+                    padding:"7px 10px", color:"#e4ddd0", fontFamily:"sans-serif", fontSize:12, outline:"none" }} />
+                <button onClick={addManualMeal} disabled={!manualInput.trim()||manualLoading}
+                  style={{ padding:"7px 14px", borderRadius:7, border:"none",
+                    background:manualInput.trim()&&!manualLoading?"#e8a838":"#2a2b30",
+                    color:manualInput.trim()&&!manualLoading?"#0e0f11":"#747280",
+                    cursor:manualInput.trim()&&!manualLoading?"pointer":"not-allowed",
+                    fontSize:12, fontWeight:600, fontFamily:"sans-serif", whiteSpace:"nowrap" }}>
+                  {manualLoading ? "…" : "Legg til"}
+                </button>
               </div>
             </div>
 
