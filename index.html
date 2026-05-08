@@ -1691,10 +1691,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   {frozenMeals.length > 0 && (
                     <div style={{ background:"#141c1f", border:"1px solid #1e3a4a", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7abfcf", fontFamily:"sans-serif" }}>
-                      🧊 {frozenMeals.map(f => {
-                        if (f.remaining >= portions) return `${f.name} (${f.remaining} porsjoner i fryseren – ikke inkludert i listen)`;
-                        return `${f.name} (${f.remaining} av ${portions} porsjoner i fryseren – skalert ned)`;
-                      }).join(" · ")}
+                      🧊 {frozenMeals.length === 1
+                        ? `${frozenMeals[0].name} er allerede i fryseren og er ${frozenMeals[0].remaining >= portions ? "ikke inkludert i listen" : "skalert ned"}.`
+                        : `${frozenMeals.length} middager er allerede i fryseren og er justert i listen.`}
                     </div>
                   )}
                   {sl.totalPrice && (
