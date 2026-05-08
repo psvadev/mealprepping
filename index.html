@@ -187,7 +187,7 @@ function getDriveToken() { try { return JSON.parse(localStorage.getItem('mp_driv
 function setDriveToken(t) { localStorage.setItem('mp_driveToken', JSON.stringify(t)); }
 function getDriveFileId() { return localStorage.getItem('mp_driveFileId') || ''; }
 function setDriveFileId(id) { localStorage.setItem('mp_driveFileId', id); }
-async function getValidAccessToken(clientId) {
+async function getValidAccessToken(clientId, clientSecret) {
   const t = getDriveToken();
   if (!t) return null;
   if (Date.now() < t.expires_at - 60000) return t.access_token;
@@ -195,7 +195,7 @@ async function getValidAccessToken(clientId) {
   try {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body: new URLSearchParams({ grant_type:'refresh_token', refresh_token:t.refresh_token, client_id:clientId })
+      body: new URLSearchParams({ grant_type:'refresh_token', refresh_token:t.refresh_token, client_id:clientId, client_secret:clientSecret||'' })
     });
     const d = await res.json();
     if (d.access_token) {
@@ -263,8 +263,9 @@ function App() {
   const [mobileWeek, setMobileWeek] = useState(0);
 
   // Google Drive sync state
-  const [googleClientId, setGoogleClientId] = useState(() => lsGet('googleClientId', ''));
-  const [driveStatus,    setDriveStatus]    = useState('idle');
+  const [googleClientId,     setGoogleClientId]     = useState(() => lsGet('googleClientId', ''));
+  const [googleClientSecret, setGoogleClientSecret] = useState(() => lsGet('googleClientSecret', ''));
+  const [driveStatus,        setDriveStatus]        = useState('idle');
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
   const [driveConnected, setDriveConnected] = useState(() => !!localStorage.getItem('mp_driveToken'));
 
@@ -300,12 +301,13 @@ function App() {
     if (!verifier) return;
     sessionStorage.removeItem('drive_pkce_verifier');
     window.history.replaceState({}, '', window.location.pathname);
-    const clientId = lsGet('googleClientId', '');
+    const clientId     = lsGet('googleClientId', '');
+    const clientSecret = lsGet('googleClientSecret', '');
     if (!clientId) return;
     fetch('https://oauth2.googleapis.com/token', {
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body: new URLSearchParams({
-        code, client_id: clientId,
+        code, client_id: clientId, client_secret: clientSecret,
         redirect_uri: window.location.origin + window.location.pathname,
         grant_type: 'authorization_code', code_verifier: verifier
       })
@@ -315,8 +317,11 @@ function App() {
           expires_at: Date.now() + (data.expires_in || 3600) * 1000 });
         setDriveConnected(true);
         lsSet('pendingDriveLoad', true);
+      } else {
+        console.error('Drive token exchange failed:', data);
+        setDriveStatus('error');
       }
-    }).catch(() => {});
+    }).catch(e => { console.error('Drive token exchange error:', e); setDriveStatus('error'); });
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
@@ -342,7 +347,8 @@ function App() {
   useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
   useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
   useEffect(() => lsSet('checkedItems',     checkedItems),     [checkedItems]);
-  useEffect(() => lsSet('googleClientId',   googleClientId),   [googleClientId]);
+  useEffect(() => lsSet('googleClientId',     googleClientId),     [googleClientId]);
+  useEffect(() => lsSet('googleClientSecret', googleClientSecret), [googleClientSecret]);
   useEffect(() => lsSet('driveSyncedAt',    driveSyncedAt),    [driveSyncedAt]);
 
   // Sync note draft when modal opens
@@ -773,7 +779,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
   // ── Google Drive sync ────────────────────────────────────────────────────
   const saveToDrive = useCallback(async (data) => {
-    const token = await getValidAccessToken(googleClientId);
+    const token = await getValidAccessToken(googleClientId, googleClientSecret);
     if (!token) return;
     setDriveStatus('syncing');
     const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
@@ -804,7 +810,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   }, [googleClientId]);
 
   const loadFromDrive = useCallback(async () => {
-    const token = await getValidAccessToken(googleClientId);
+    const token = await getValidAccessToken(googleClientId, googleClientSecret);
     if (!token) return;
     setDriveStatus('syncing');
     try {
@@ -845,7 +851,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   }, [googleClientId]);
 
   const connectGoogleDrive = useCallback(async () => {
-    if (!googleClientId) return;
+    if (!googleClientId || !googleClientSecret) return;
     const { verifier, challenge } = await generatePKCE();
     sessionStorage.setItem('drive_pkce_verifier', verifier);
     const params = new URLSearchParams({
@@ -1747,29 +1753,36 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
               <div style={{ marginBottom:12 }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>OAuth klient-ID</label>
+                  <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif" }}>Client ID</label>
                   <span style={{ fontSize:11, fontFamily:"sans-serif",
                     color: driveConnected ? "#7abf7a" : "#747280" }}>
                     {driveConnected ? "✓ Tilkoblet" : "Ikke tilkoblet"}
                   </span>
                 </div>
-                <div style={{ display:"flex", gap:8 }}>
-                  <input type="password" value={googleClientId} onChange={e=>setGoogleClientId(e.target.value)}
-                    placeholder="……apps.googleusercontent.com"
-                    disabled={driveConnected}
-                    style={{ flex:1, background:"#141517", border:`1px solid ${driveConnected?"#2a3a2a":"#2a2b30"}`,
-                      borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"monospace", fontSize:12,
-                      opacity: driveConnected ? 0.6 : 1 }} />
-                </div>
+                <input type="password" value={googleClientId} onChange={e=>setGoogleClientId(e.target.value)}
+                  placeholder="……apps.googleusercontent.com"
+                  disabled={driveConnected}
+                  style={{ width:"100%", boxSizing:"border-box", background:"#141517", border:`1px solid ${driveConnected?"#2a3a2a":"#2a2b30"}`,
+                    borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"monospace", fontSize:12,
+                    opacity: driveConnected ? 0.6 : 1 }} />
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif", display:"block", marginBottom:6 }}>Client Secret</label>
+                <input type="password" value={googleClientSecret} onChange={e=>setGoogleClientSecret(e.target.value)}
+                  placeholder="GOCSPX-……"
+                  disabled={driveConnected}
+                  style={{ width:"100%", boxSizing:"border-box", background:"#141517", border:`1px solid ${driveConnected?"#2a3a2a":"#2a2b30"}`,
+                    borderRadius:6, padding:"8px 10px", color:"#e4ddd0", fontFamily:"monospace", fontSize:12,
+                    opacity: driveConnected ? 0.6 : 1 }} />
               </div>
 
               {!driveConnected ? (
-                <button onClick={connectGoogleDrive} disabled={!googleClientId}
+                <button onClick={connectGoogleDrive} disabled={!googleClientId || !googleClientSecret}
                   style={{ padding:"8px 16px", borderRadius:6,
-                    border: googleClientId ? "1px solid #e8a838" : "1px solid #2a2b30",
-                    background: googleClientId ? "#e8a83822" : "transparent",
-                    color: googleClientId ? "#e8a838" : "#747280",
-                    cursor: googleClientId ? "pointer" : "default",
+                    border: (googleClientId && googleClientSecret) ? "1px solid #e8a838" : "1px solid #2a2b30",
+                    background: (googleClientId && googleClientSecret) ? "#e8a83822" : "transparent",
+                    color: (googleClientId && googleClientSecret) ? "#e8a838" : "#747280",
+                    cursor: (googleClientId && googleClientSecret) ? "pointer" : "default",
                     fontSize:13, fontFamily:"sans-serif" }}>
                   Koble til Google Drive
                 </button>

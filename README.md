@@ -36,6 +36,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - A modern browser (Chrome, Edge, Firefox)
 - [Anthropic API key](https://console.anthropic.com/settings/keys) — required for AI features
 - [Kassal API key](https://kassal.app/register) — optional, enables real Norwegian grocery prices (free hobby plan, 60 req/min)
+- [Google Cloud OAuth client](https://console.cloud.google.com) — optional, enables Google Drive sync between devices. Requires a project with the Drive API enabled and an OAuth 2.0 Web application client ID + secret. Add `http://localhost:8080/` as an authorized redirect URI.
 
 ---
 

@@ -55,6 +55,11 @@ All keys use the `mp_` prefix.
 | `mp_freezerItems` | array | Freezer inventory — meals logged from the plan with portion tracking |
 | `mp_checkedItems` | object | Shopping list check-off state — `{ [weekIndex]: { [catName|itemName]: true } }` |
 | `mp_dislikedMeals` | array | Meal names the family didn't enjoy — fed into suggestion prompts as hard exclusions |
+| `mp_googleClientId` | string | Google OAuth client ID — required for Drive sync |
+| `mp_googleClientSecret` | string | Google OAuth client secret — required for Drive sync (stored client-side; acceptable for personal use with `drive.file` scope) |
+| `mp_driveToken` | object | OAuth token — `{ access_token, refresh_token, expires_at }`. Managed automatically, never exported. |
+| `mp_driveFileId` | string | Google Drive file ID of the backup JSON — set on first save, reused on subsequent syncs |
+| `mp_driveSyncedAt` | string | ISO timestamp of last successful sync |
 
 ---
 
