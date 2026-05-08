@@ -183,12 +183,8 @@ async function generatePKCE() {
   const challenge = btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
   return { verifier, challenge };
 }
-function getDriveToken() { try { return JSON.parse(localStorage.getItem('mp_driveToken')); } catch { return null; } }
-function setDriveToken(t) { localStorage.setItem('mp_driveToken', JSON.stringify(t)); }
-function getDriveFileId() { return localStorage.getItem('mp_driveFileId') || ''; }
-function setDriveFileId(id) { localStorage.setItem('mp_driveFileId', id); }
 async function getValidAccessToken(clientId, clientSecret) {
-  const t = getDriveToken();
+  const t = lsGet('driveToken', null);
   if (!t) return null;
   if (Date.now() < t.expires_at - 60000) return t.access_token;
   if (!t.refresh_token || !clientId) return null;
@@ -200,11 +196,11 @@ async function getValidAccessToken(clientId, clientSecret) {
     const d = await res.json();
     if (d.access_token) {
       const updated = { ...t, access_token:d.access_token, expires_at: Date.now()+(d.expires_in||3600)*1000 };
-      setDriveToken(updated);
+      lsSet('driveToken', updated);
       return d.access_token;
     }
   } catch {}
-  setDriveToken(null);
+  lsSet('driveToken', null);
   return null;
 }
 
@@ -267,7 +263,7 @@ function App() {
   const [googleClientSecret, setGoogleClientSecret] = useState(() => lsGet('googleClientSecret', ''));
   const [driveStatus,        setDriveStatus]        = useState('idle');
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
-  const [driveConnected, setDriveConnected] = useState(() => !!localStorage.getItem('mp_driveToken'));
+  const [driveConnected, setDriveConnected] = useState(() => !!lsGet('driveToken', null));
 
   useEffect(() => {
     const handler = () => setIsMobile(Math.min(window.innerWidth, window.innerHeight) < 640);
@@ -313,7 +309,7 @@ function App() {
       })
     }).then(r => r.json()).then(data => {
       if (data.access_token) {
-        setDriveToken({ access_token: data.access_token, refresh_token: data.refresh_token,
+        lsSet('driveToken', { access_token: data.access_token, refresh_token: data.refresh_token,
           expires_at: Date.now() + (data.expires_in || 3600) * 1000 });
         setDriveConnected(true);
         lsSet('pendingDriveLoad', true);
@@ -783,14 +779,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     if (!token) return;
     setDriveStatus('syncing');
     const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
-    const fileId = getDriveFileId();
+    const fileId = lsGet('driveFileId', '');
     try {
       let res;
       if (fileId) {
         res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
           method:'PATCH', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' }, body:blob
         });
-        if (res.status === 404) { setDriveFileId(''); setDriveStatus('error'); return; }
+        if (res.status === 404) { lsSet('driveFileId', ''); setDriveStatus('error'); return; }
       } else {
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify({ name:'reheat-and-eat-backup.json', mimeType:'application/json' })], { type:'application/json' }));
@@ -799,28 +795,27 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           method:'POST', headers:{ Authorization:`Bearer ${token}` }, body:form
         });
         const d = await res.json();
-        if (d.id) setDriveFileId(d.id);
+        if (d.id) lsSet('driveFileId', d.id);
       }
       if (res.ok) {
-        const now = new Date().toISOString();
-        setDriveSyncedAt(now); lsSet('driveSyncedAt', now);
+        setDriveSyncedAt(new Date().toISOString());
         setDriveStatus('synced');
       } else { setDriveStatus('error'); }
     } catch { setDriveStatus('error'); }
-  }, [googleClientId]);
+  }, [googleClientId, googleClientSecret]);
 
   const loadFromDrive = useCallback(async () => {
     const token = await getValidAccessToken(googleClientId, googleClientSecret);
     if (!token) return;
     setDriveStatus('syncing');
     try {
-      let fileId = getDriveFileId();
+      let fileId = lsGet('driveFileId', '');
       if (!fileId) {
         const s = await fetch(`https://www.googleapis.com/drive/v3/files?q=name%3D'reheat-and-eat-backup.json'&spaces=drive&fields=files(id)`,
           { headers:{ Authorization:`Bearer ${token}` } });
         const sd = await s.json();
         fileId = sd.files?.[0]?.id || '';
-        if (fileId) setDriveFileId(fileId);
+        if (fileId) lsSet('driveFileId', fileId);
       }
       if (!fileId) { setDriveStatus('idle'); return; }
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
@@ -844,11 +839,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       if (d.mealHistory) setMealHistory(d.mealHistory);
       if (d.freezerItems) setFreezerItems(d.freezerItems);
       if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
-      const now = new Date().toISOString();
-      setDriveSyncedAt(now); lsSet('driveSyncedAt', now);
+      setDriveSyncedAt(new Date().toISOString());
       setDriveStatus('synced');
     } catch { setDriveStatus('error'); }
-  }, [googleClientId]);
+  }, [googleClientId, googleClientSecret]);
 
   const connectGoogleDrive = useCallback(async () => {
     if (!googleClientId || !googleClientSecret) return;
@@ -1490,8 +1484,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   cursor: loading ? "not-allowed" : "pointer", fontSize:12, fontFamily:"sans-serif", fontWeight:700
                 }}>{loading ? "Genererer..." : suggestions.length ? "🔄 Nye forslag" : "✨ Generer forslag"}</button>
                 <button onClick={()=>setConfirmClear(true)} style={{
-                  padding:"7px 12px", borderRadius:7, border:"1px solid #3a2a2a",
-                  background:"transparent", color:"#907070", cursor:"pointer",
+                  padding:"7px 12px", borderRadius:7, border:"1px solid #e87060",
+                  background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                   fontSize:12, fontFamily:"sans-serif"
                 }}>✕ Tøm</button>
               </div>
@@ -1800,8 +1794,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     Last inn nå
                   </button>
                   <button onClick={disconnectGoogleDrive} style={{ padding:"5px 12px", borderRadius:6,
-                    border:"1px solid #2a2b30", background:"transparent",
-                    color:"#747280", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                    border:"1px solid #e87060", background:"#3a1a1a",
+                    color:"#e87060", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
                     Koble fra
                   </button>
                 </div>
@@ -1899,7 +1893,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>{favourites.length} retter</span>
                   {favourites.length > 0 && (
                     <button onClick={()=>setFavourites([])} style={{ padding:"4px 10px", borderRadius:5,
-                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                      border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm alle</button>
                   )}
                 </div>
@@ -1937,7 +1931,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   </span>
                   {dislikedMeals.length > 0 && (
                     <button onClick={()=>setDislikedMeals([])} style={{ padding:"4px 10px", borderRadius:5,
-                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                      border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm liste</button>
                   )}
                 </div>
@@ -1974,7 +1968,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   </span>
                   {mealHistory.length>0 && (
                     <button onClick={()=>setMealHistory([])} style={{ padding:"4px 10px", borderRadius:5,
-                      border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                      border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm historikk</button>
                   )}
                 </div>
@@ -2018,12 +2012,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>RESETT</div>
                 <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                   <button onClick={()=>{ if(confirm("Tøm oppskriftsbufferet? Oppskrifter lastes inn på nytt ved behov.")) setRecipeCache({}); }}
-                    style={{ padding:"7px 14px", borderRadius:7, border:"1px solid #3a2a2a",
-                      background:"transparent", color:"#907070", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                    style={{ padding:"7px 14px", borderRadius:7, border:"1px solid #e87060",
+                      background:"#3a1a1a", color:"#e87060", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
                     Tøm oppskriftsbuffer
                   </button>
                   <button onClick={()=>setConfirmClear(true)} style={{ padding:"7px 14px", borderRadius:7,
-                    border:"1px solid #3a2a2a", background:"transparent", color:"#907070",
+                    border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                     cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>Tøm ukeplan</button>
                 </div>
               </div>
@@ -2047,8 +2041,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               </h2>
               {freezerItems.some(i=>i.remaining===0) && (
                 <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.remaining>0))}
-                  style={{ padding:"6px 12px", borderRadius:7, border:"1px solid #3a2a2a",
-                    background:"transparent", color:"#907070", cursor:"pointer",
+                  style={{ padding:"6px 12px", borderRadius:7, border:"1px solid #e87060",
+                    background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                     fontSize:11, fontFamily:"sans-serif" }}>Tøm tomme</button>
               )}
             </div>
@@ -2085,8 +2079,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           fontFamily:"sans-serif", fontWeight:600 }}>⏰ {ageDays} {ageDays === 1 ? "dag" : "dager"} · bruk snart</span>}
                       </div>
                       <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date))}
-                        style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #3a2a2a",
-                          background:"transparent", color:"#907070", cursor:"pointer",
+                        style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #e87060",
+                          background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                           fontSize:11, fontFamily:"sans-serif" }}>Fjern batch</button>
                     </div>
                     <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
