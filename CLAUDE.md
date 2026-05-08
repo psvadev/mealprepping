@@ -89,6 +89,7 @@ Four top-level views switched by `setView(...)`:
 - **Favourites panel** — toggled via ★ button. Shows starred meals as draggable chips; clicking one adds it back to the suggestion list.
 - **Suggestion cards** — grid of AI-generated meals. Click to expand inline (full-width) showing name, cuisine, protein type, and prep time. Recipe is **not** fetched on expand — only fetched when opened via plan modal. Drag to grid or click in select mode to assign.
 - **Filters** — filter suggestions by protein type. Applied client-side, no re-fetch.
+- **Manual meal entry** — text input below the generate/clear buttons. Typing a meal name and pressing Enter or "Legg til" calls `addManualMeal()`, which makes a small Claude call (max_tokens: 256) to enrich the name into a full meal object (`name, emoji, protein, category, prepTime, description`). The enriched meal is prepended to `suggestions`. Falls back to defaults if the API call fails. Store-bought components (pizzabunn, tortillas, etc.) are explicitly allowed in the prompt.
 - **"→ Fryser" button** — appears in the week label cell when the week has at least one non-leftover meal. Calls `addWeekToFreezer(week)`, which logs all non-leftover meals for that week to `mp_freezerItems` with `remaining = total = portions` and `cookedAt = today`, then navigates to the Fryser view.
 - **"✕ Tøm" button** — clears the plan. Located beside the generate button in the suggestions panel (not in the nav bar).
 
@@ -136,6 +137,10 @@ Freezer inventory for tracking batch-cooked portions.
 
 ### Generate shopping list — `generateShoppingList(force?)`
 `POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system. Regenerating also clears `checkedItems` for that week.
+
+**Freezer-aware:** Before building the prompt, planned meals are cross-referenced against `freezerItems` by name (case-insensitive). Matches with `remaining > 0` inject a note: if `remaining >= portions`, the AI is told to skip that meal's ingredients entirely; if partial, it scales to `portions - remaining` new portions only.
+
+**Store-bought components:** The prompt instructs the AI to list commonly pre-made components (pizzabunn, tortillas, butterdeig, etc.) as a single finished item rather than expanding into individual dough ingredients.
 
 ---
 
