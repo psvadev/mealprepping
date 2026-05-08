@@ -605,7 +605,7 @@ function App() {
     const cuisineGoals = allCuisines.filter(c=>(cuisineTargets[c.key]||0)>0)
       .map(c=>`${c.label}: ca. ${cuisineTargets[c.key]}x per uke`).join(", ");
     const cuisineLine   = cuisineGoals ? `\nKjøkkenmål per uke (veiledende): ${cuisineGoals}.` : "";
-    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
+    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}. Dette gjelder også rettnavn og inspirasjonskilder – ikke bruk ekskluderte råvarer i navn, beskrivelser eller som grunnlag for retten.` : "";
     const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
     const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
     const avoidLine     = alreadyPlanned.length ? `\nDisse er allerede planlagt, ikke gjenta dem: ${alreadyPlanned.join(", ")}.` : "";
@@ -667,7 +667,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     const p = PROTEINS.find(x=>x.key===proteinKey);
     if (!p) return;
     setRerollLoading(proteinKey); setError(null); setRetryFn(null);
-    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}.` : "";
+    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}. Dette gjelder også rettnavn og inspirasjonskilder – ikke bruk ekskluderte råvarer i navn, beskrivelser eller som grunnlag for retten.` : "";
     const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
     const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
     const existing = suggestions.filter(s=>s.protein!==proteinKey).map(s=>s.name);
