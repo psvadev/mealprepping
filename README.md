@@ -34,9 +34,14 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 ## Requirements
 
 - A modern browser (Chrome, Edge, Firefox)
-- [Anthropic API key](https://console.anthropic.com/settings/keys) — required for AI features
-- [Kassal API key](https://kassal.app/register) — optional, enables real Norwegian grocery prices (free hobby plan, 60 req/min)
-- [Google Cloud OAuth client](https://console.cloud.google.com) — optional, enables Google Drive sync between devices. Requires a project with the Drive API enabled and an OAuth 2.0 Web application client ID + secret. Add `http://localhost:8080/` as an authorized redirect URI.
+
+| Credential | Required | Purpose | Access granted |
+|---|---|---|---|
+| [Anthropic API key](https://console.anthropic.com/settings/keys) | **Yes** | All AI features — suggestions, recipes, shopping list | Anthropic API only |
+| [Kassal API key](https://kassal.app/register) | No | Real Norwegian grocery prices; falls back to AI estimates without it | Product search only (free hobby plan, 60 req/min) |
+| Google OAuth Client ID + Secret | No | Drive sync — auto-saves plan to Google Drive so multiple devices stay in sync | Only the single backup file the app created (`drive.file` scope) — no access to email, calendar, or other Drive files |
+
+**Google Drive setup:** Create a project in [Google Cloud Console](https://console.cloud.google.com), enable the Drive API, and create an OAuth 2.0 Web application client. Add `http://localhost:8080/` as an authorised redirect URI. Enter the Client ID and Client Secret in ⚙ Innstillinger, then click "Koble til Google Drive" to log in. Multiple family members can share the same plan by signing in with the same Google account — the `drive.file` scope means the app can only see the one file it created, nothing else in the account.
 
 ---
 
