@@ -1681,8 +1681,22 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
             {shoppingLists[shoppingWeek] && !shoppingLoading && (() => {
               const sl = shoppingLists[shoppingWeek];
+              const frozenMeals = freezerItems.filter(f =>
+                f.remaining > 0 &&
+                Array.from({length:7}, (_,d) => plan[shoppingWeek]?.[d]).filter(Boolean)
+                  .some(m => !m.leftover && m.name.toLowerCase() === f.name.toLowerCase())
+              );
               return (
                 <>
+                  {frozenMeals.length > 0 && (
+                    <div style={{ background:"#141c1f", border:"1px solid #1e3a4a", borderRadius:8,
+                      padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7abfcf", fontFamily:"sans-serif" }}>
+                      🧊 {frozenMeals.map(f => {
+                        if (f.remaining >= portions) return `${f.name} (${f.remaining} porsjoner i fryseren – ikke inkludert i listen)`;
+                        return `${f.name} (${f.remaining} av ${portions} porsjoner i fryseren – skalert ned)`;
+                      }).join(" · ")}
+                    </div>
+                  )}
                   {sl.totalPrice && (
                     <div style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
