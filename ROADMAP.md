@@ -6,13 +6,6 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 
 ---
 
-## Medium-term (moderate complexity, still single-file)
-
-### Leftover handling improvements
-Currently "leftover" is a freeform concept. A structured leftovers system could let users mark a freezer meal as "also provides lunch" and track that separately, reducing manual portion math.
-
----
-
 ## Long-term / architectural changes
 
 ### SaaS / multi-user
