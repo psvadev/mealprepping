@@ -1681,11 +1681,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
             {shoppingLists[shoppingWeek] && !shoppingLoading && (() => {
               const sl = shoppingLists[shoppingWeek];
+              const weekMeals = Array.from({length:7}, (_,d) => plan[shoppingWeek]?.[d]).filter(m => m && !m.leftover);
               const frozenMeals = freezerItems.filter(f =>
                 f.remaining > 0 &&
-                Array.from({length:7}, (_,d) => plan[shoppingWeek]?.[d]).filter(Boolean)
-                  .some(m => !m.leftover && m.name.toLowerCase() === f.name.toLowerCase())
+                weekMeals.some(m => m.name.toLowerCase() === f.name.toLowerCase())
               );
+              const allFrozen = weekMeals.length > 0 && frozenMeals.length >= weekMeals.length;
+              const visibleCategories = allFrozen
+                ? sl.categories.filter(c => c.name !== 'Har du dette hjemme?')
+                : sl.categories;
               return (
                 <>
                   {frozenMeals.length > 0 && (
@@ -1708,7 +1712,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     </div>
                   )}
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:10 }}>
-                    {sl.categories.map((cat,i) => (
+                    {visibleCategories.map((cat,i) => (
                       <div key={i} style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10, padding:"12px 14px" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:10,
                           paddingBottom:8, borderBottom:"1px solid #22232a" }}>
