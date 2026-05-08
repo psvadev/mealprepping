@@ -6,13 +6,6 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 
 ---
 
-## Near-term (fits current architecture)
-
-### Freezer — edit item name / emoji
-Currently, freezer items inherit the meal name and emoji from the plan and can't be edited. A tap-to-edit would let users correct AI-generated names before they become permanent in the log.
-
----
-
 ## Medium-term (moderate complexity, still single-file)
 
 ### Leftover handling improvements
