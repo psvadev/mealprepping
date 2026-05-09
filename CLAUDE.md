@@ -40,8 +40,8 @@ All keys use the `mp_` prefix.
 | `mp_mealHistory` | array | Names of all meals ever assigned to the plan (max 100), sent to AI to avoid repetition |
 | `mp_mealNotes` | object | Free-text notes per meal, keyed by meal name |
 | `mp_recipeCache` | object | Full recipe + nutrition data per meal, keyed by meal name |
-| `mp_shoppingList` | object | Last generated shopping list (categories + totalPrice) |
-| `mp_lastShoppingKey` | string | planKey snapshot — used to detect when shopping list needs regeneration |
+| `mp_shoppingLists` | object | Shopping lists keyed by week index — each value is `{categories, totalPrice}` |
+| `mp_lastShoppingKeys` | object | planKey snapshots keyed by week index — used to detect when a week's list needs regeneration |
 | `mp_proteinTargets` | object | Per-protein weekly targets: `{fisk, kylling, kjott, vegeta}` |
 | `mp_cuisineTargets` | object | Per-cuisine weekly targets, keyed by cuisine key |
 | `mp_enabledCuisines` | array | Keys of cuisines active in the Kjøkken panel (subset of `CUISINE_LIBRARY`) |
@@ -165,8 +165,8 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 
 | Action | Implementation |
 |--------|---------------|
-| Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`. Excludes: API keys (`mp_anthropicKey`, `mp_kassalKey`) and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
-| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. `freezerItems` restored if present in the file. |
+| Export plan | Blob URL → `middagsplan-{date}.json`. Includes: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `lastShoppingKeys`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`, `dislikedMeals`. Excludes: API keys and recipe cache (`mp_recipeCache` — recipes are re-fetched on demand). |
+| Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache not included — re-fetched on demand. `freezerItems` and `dislikedMeals` restored if present. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
 | Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button and a Lukk button; ESC also closes the popup window. **Note:** `<\/script>` must be escaped inside the JS template literal used to build the popup HTML — raw `</script>` terminates the outer Babel script block early and breaks the app. |
 
@@ -193,7 +193,7 @@ Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Dr
 
 ## Cuisines
 
-`CUISINE_LIBRARY` contains 19 predefined cuisines (norsk, italiensk, asiatisk, meksikansk, indisk, japansk, kinesisk, thai, gresk, midtøsten, middelhavet, spansk, fransk, amerikansk, vietnamesisk, koreansk, tyrkisk, afrikansk/marokkansk, filippinsk). No free-text entry — all cuisines come from the library.
+`CUISINE_LIBRARY` contains 19 predefined cuisines (norsk, italiensk, asiatisk, meksikansk, indisk, japansk, kinesisk, thai, gresk, midtøsten, latinamerikansk, spansk, fransk, amerikansk, vietnamesisk, koreansk, tyrkisk, afrikansk, filippinsk). No free-text entry — all cuisines come from the library.
 
 `enabledCuisines` (localStorage array of keys, default: the first 5) controls which appear in the Kjøkken panel. Active cuisines show their CuisineCounter + ✕ to disable. Inactive cuisines appear as dashed + chips below the active list. Disabling a cuisine also removes its target from `cuisineTargets`. `allCuisines` is derived via `useMemo` filtering `CUISINE_LIBRARY` by `enabledCuisines`.
 
@@ -210,10 +210,11 @@ Every meal assigned to the plan (via click, select mode, or drag) is added to `m
 Sections:
 
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs, stored immediately in localStorage on change. Never included in plan exports.
-2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingList` immediately, since AI-generated amounts are baked into the cached text. Changing portions calls `changePortions(n)` which also clears `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — so re-fetched recipes reflect the new count.
+2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingLists` immediately, since AI-generated amounts are baked into the cached text. Changing portions calls `changePortions(n)` which also clears `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — so re-fetched recipes reflect the new count.
 3. **Mathistorikk** — scrollable list of recent meals, clear button.
 4. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
 5. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
+6. **Google Drive** — connect/disconnect button, last synced timestamp, manual pull button. Shows an amber "tilkoblingen er utløpt" warning when the token has expired (`driveStatus === 'expired'`), prompting reconnection.
 
 ---
 
@@ -258,7 +259,7 @@ Font: `'Georgia', 'Times New Roman', serif` for headings/body; `sans-serif` for 
 All layout via inline styles — no CSS classes except global resets and scrollbar styling.
 Mobile friendly via `flexWrap`, `auto-fill` grid columns, and a dedicated mobile layout at `< 640px`.
 `zoom: 1.1` is restricted to `@media (min-width: 640px)` — not applied on phones.
-Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length. `maxWidth` on the main container and header is 1400px (up from 1000px) to better utilise wide screens.
+Plan grid uses `tableLayout: "fixed"` so all day columns stay equal width regardless of meal name length. `maxWidth` on the main container and header is 1400px to better utilise wide screens.
 Grid rows use equal-height cells: `<td>` has `height: "1px"` (table layout trick meaning "fill the row") and the inner div uses `height: "100%"` so all cells in a row stretch to match the tallest.
 Plan grid table has `minWidth: 560px` so it scrolls horizontally on narrow screens rather than squashing columns.
 
