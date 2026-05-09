@@ -86,6 +86,7 @@ const SYSTEM_PROMPT = `Du er en matplanlegger-assistent for en norsk familie som
 - Praktisk for en travel norsk familie
 
 Bruk ALLTID norsk bokmål — aldri nynorsk eller dialekt (f.eks. "melk" ikke "mjølk", "to" ikke "tvo").
+Bruk alltid de vanlige norske navnene på ingredienser slik de selges i norske dagligvarebutikker (f.eks. "løk" ikke "kepaløk", "kokosmelk" ikke "kokosmilk"). Alle ingredienser skal være lett tilgjengelige i vanlige dagligvarebutikker.
 Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.`;
 
 // ── localStorage helpers ───────────────────────────────────────────────────
@@ -538,7 +539,7 @@ function App() {
         body: JSON.stringify({
           model:"claude-sonnet-4-6",
           max_tokens:2000,
-          system:"Du er en kokk-assistent. Bruk ALLTID norsk bokmål — aldri nynorsk eller dialektformer (f.eks. \"kokosmelk\" ikke \"kokosmjølk\", \"melk\" ikke \"mjølk\"). Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON. JSON-svaret MÅ alltid inkludere feltet \"portionWeightGrams\" med estimert totalvekt per porsjon i gram.",
+          system:"Du er en kokk-assistent. Bruk ALLTID norsk bokmål — aldri nynorsk eller dialektformer (f.eks. \"kokosmelk\" ikke \"kokosmjølk\", \"melk\" ikke \"mjølk\"). Bruk alltid de vanlige norske navnene på ingredienser slik de selges i norske dagligvarebutikker (f.eks. \"løk\" ikke \"kepaløk\", \"kokosmelk\" ikke \"kokosmilk\"). Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON. JSON-svaret MÅ alltid inkludere feltet \"portionWeightGrams\" med estimert totalvekt per porsjon i gram.",
           messages:[{
             role:"user",
             content:`Svar alltid på norsk bokmål.\n\nGi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
