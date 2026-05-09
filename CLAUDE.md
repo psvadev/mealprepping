@@ -207,14 +207,16 @@ Every meal assigned to the plan (via click, select mode, or drag) is added to `m
 
 ## Settings page
 
-Sections:
+Sections (in display order):
 
-1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs, stored immediately in localStorage on change. Never included in plan exports.
-2. **Standardverdier** — weeks, portions, suggestion count, max time, and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingLists` immediately, since AI-generated amounts are baked into the cached text. Changing portions calls `changePortions(n)` which also clears `recipeCache`, `shoppingLists`, and `lastShoppingKeys` — so re-fetched recipes reflect the new count.
-3. **Mathistorikk** — scrollable list of recent meals, clear button.
-4. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
-5. **Data** — export plan, import plan, export shopping list, clear recipe cache, clear plan.
-6. **Google Drive** — connect/disconnect button, last synced timestamp, manual pull button. Shows an amber "tilkoblingen er utløpt" warning when the token has expired (`driveStatus === 'expired'`), prompting reconnection.
+1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs with "Fjern" clear buttons, stored immediately in localStorage on change. Never included in plan exports.
+2. **Google Drive Sync** — Client ID + Client Secret inputs (disabled when connected). "Koble til Google Drive" button; when connected shows sync status (syncing / synced / error / idle), "Last inn nå" pull button, and "Koble fra" disconnect button. Amber warning when token has expired (`driveStatus === 'expired'`), prompting reconnection.
+3. **Standardverdier** — weeks (1–4), portions (1–20 via Stepper), suggestion count (5–30 step 5), max prep time slider (15–120 min step 15), and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingLists` immediately. Changing portions calls `changePortions(n)` which also clears those caches.
+4. **Allergener og ekskluderinger** — free-text input for ingredients/allergens the AI should always avoid. "× Fjern alle" clear button shown when non-empty. Value is `mp_exclusions`, injected into all three AI prompts.
+5. **Favoritter** — all starred meals shown as chips with per-item ✕ removal and a "Tøm alle" button. Empty state prompts to use ★ on a suggestion or in the plan.
+6. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
+7. **Mathistorikk** — scrollable wrapped list of recent meals as chips, with count and "Tøm historikk" button. Empty state explains meals are added automatically when assigned to the plan.
+8. **Data** — export plan (.json), import plan (.json), export shopping list (.txt). Sub-section **Resett**: "Tøm oppskriftsbuffer" (clears `mp_recipeCache`) and "Tøm ukeplan" (clears plan + suggestions + shopping lists) with confirmation.
 
 ---
 

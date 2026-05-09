@@ -27,6 +27,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Meal ratings** — 👍/👎 on freezer items once you've eaten a portion; thumbs up adds to favourites, thumbs down blocks the meal from future AI suggestions
 - **Shopping list check-off** — tap items while shopping to strike them through; progress persists across page refreshes and clears when the list is regenerated
 - **Batch & freeze tips** — each recipe includes 1–3 AI-generated tips on how to pack, freeze, and reheat the dish
+- **Google Drive sync** — optional auto-sync to a single JSON file in your Google Drive; keeps plan, freezer, and recipe cache in sync across devices using OAuth PKCE with `drive.file` scope (no access to other Drive files)
 - **Export / import** — save and restore the full plan as JSON; export shopping list as `.txt`
 - **Mobile layout** — responsive design for phones (< 640px): bottom nav bar, compact header, one-week-at-a-time plan grid; desktop controls hidden on mobile
 
@@ -69,5 +70,6 @@ Open `http://localhost:8080` in your browser, then go to **⚙ Innstillinger** a
 | AI | Anthropic API called directly from the browser (`anthropic-dangerous-direct-browser-access: true`) |
 | Model | `claude-sonnet-4-6` |
 | Prices | `kassal.app/api/v1/products` — optional, falls back to AI estimate |
+| Sync | Google Drive OAuth PKCE (`drive.file` scope) — optional, auto-saves plan JSON across devices |
 
 See [CLAUDE.md](CLAUDE.md) for full technical documentation.
