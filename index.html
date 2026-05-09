@@ -1533,6 +1533,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Forslag/uke</span>
                   <Stepper value={suggestionCount} min={5} max={30} step={5} onChange={setSuggestionCount} />
                 </div>
+                <div style={{ display:"flex", alignItems:"center", gap:6, background:"#18191c",
+                  border:"1px solid #22232a", borderRadius:7, padding:"5px 10px" }}>
+                  <span style={{ fontSize:10, color:"#b4b2c2", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>⏱ Maks</span>
+                  <input type="range" min={15} max={120} step={15} value={maxTime} onChange={e=>setMaxTime(Number(e.target.value))}
+                    style={{ width:72, accentColor:"#e8a838" }} />
+                  <span style={{ fontSize:12, fontWeight:700, color:"#e8e0d0", fontFamily:"sans-serif", minWidth:42 }}>{maxTime} min</span>
+                </div>
                 <button onClick={generateSuggestions} disabled={loading} style={{
                   padding:"7px 16px", borderRadius:7, border:"none",
                   background: loading ? "#22232a" : "linear-gradient(135deg,#b8761e,#e8a838)",
@@ -1544,13 +1551,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                   fontSize:12, fontFamily:"sans-serif"
                 }}>✕ Tøm</button>
-                <div style={{ display:"flex", alignItems:"center", gap:6, background:"#18191c",
-                  border:"1px solid #22232a", borderRadius:7, padding:"5px 10px" }}>
-                  <span style={{ fontSize:10, color:"#b4b2c2", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>⏱ Maks</span>
-                  <input type="range" min={15} max={120} step={15} value={maxTime} onChange={e=>setMaxTime(Number(e.target.value))}
-                    style={{ width:72, accentColor:"#e8a838" }} />
-                  <span style={{ fontSize:12, fontWeight:700, color:"#e8e0d0", fontFamily:"sans-serif", minWidth:42 }}>{maxTime} min</span>
-                </div>
               </div>
               <div style={{ display:"flex", gap:6 }}>
                 <input type="text" value={manualInput} onChange={e=>setManualInput(e.target.value)}
