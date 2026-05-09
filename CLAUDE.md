@@ -4,7 +4,7 @@ Browser-based weekly meal planner for a Norwegian family doing batch-cook meal p
 
 **Meal prep philosophy:** everything is cooked on one batch day, frozen in portions, and dinner is reheating and eating only — no per-dinner prep whatsoever. All AI prompts (suggestions, recipes, shopping list) enforce this strictly.
 
-**Localisation:** the UI and all AI-generated content (suggestions, recipes, shopping lists) are in Norwegian bokmål. All three AI prompts begin with `Svar alltid på norsk bokmål.` to enforce this. The codebase itself is in English. There is no i18n layer — Norwegian is hardcoded throughout.
+**Localisation:** the UI and all AI-generated content (suggestions, recipes, shopping lists) are in Norwegian bokmål. All three AI prompts begin with `Svar alltid på norsk bokmål.` to enforce this. The codebase itself is in English. There is no i18n layer — Norwegian is hardcoded throughout. Prompts also explicitly require common supermarket ingredient names (e.g. "løk" not "kepaløk", "kokosmelk" not "kokosmilk") to avoid confusion when the same ingredient appears under different names in the same recipe or shopping list.
 
 ---
 
@@ -128,7 +128,7 @@ Freezer inventory for tracking batch-cooked portions.
 - Protein targets per week (soft guidance)
 - Cuisine targets per week (soft guidance)
 - Max prep time (hard constraint)
-- Exclusions / allergens
+- Exclusions / allergens — enforced on ingredient names, dish names, and inspiration sources (prevents "fårikål-inspirert" style workarounds)
 - Already-planned meals (avoid repeats within current plan)
 - Meal history (`mp_mealHistory`, last 30 entries) — avoids long-term repetition
 
@@ -150,6 +150,7 @@ Freezer inventory for tracking batch-cooked portions.
 - **Check-off** — each item `<li>` is clickable (`cursor: pointer`). Clicking toggles `checkedItems[week][catName|itemName]`. Checked items show name with `line-through`, dimmed color, and 55% opacity. Sub-items are hidden while the parent is checked.
 - **"✕ Nullstill" button** — appears in the shopping header only when ≥1 item is checked for the current week. Clears all checked items for that week. Styled as a ghost/outline button matching the other header buttons.
 - **Persistence** — `mp_checkedItems` persists in localStorage so check-off state survives page refresh. Cleared automatically when the list is regenerated for that week.
+- **Freezer notice** — shown above the list when any planned meals are already in the freezer with `remaining > 0`. Single-sentence summary (e.g. "Kyllinggryte ligger allerede i fryseren og er ikke inkludert i listen."). When `allFrozen` (all planned meals covered by freezer), the "Har du dette hjemme?" pantry category and the total price estimate are hidden — the list is effectively empty and showing them would be misleading.
 
 ---
 
@@ -169,6 +170,25 @@ Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amou
 | Import plan | `FileReader` → JSON parse → restore state slices individually. API keys never imported. Recipe cache is not included so recipes will be re-fetched when meals are opened. `freezerItems` restored if present in the file. |
 | Export shopping list | Blob URL → `handleliste.txt`. Plain text with category sections and price estimate. |
 | Print / share | `window.open('','_blank')` → `document.write(html)`. Dark-theme page (matches app slate palette) with weekly grid + shopping list. `@media print` overrides to white-on-light for physical printing. Includes a Print button and a Lukk button; ESC also closes the popup window. **Note:** `<\/script>` must be escaped inside the JS template literal used to build the popup HTML — raw `</script>` terminates the outer Babel script block early and breaks the app. |
+
+---
+
+## Google Drive sync
+
+Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Drive using OAuth PKCE flow with `drive.file` scope.
+
+**Payload** — includes everything except API keys and OAuth tokens: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `lastShoppingKeys`, `recipeCache`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`, `dislikedMeals`. Recipe cache is included so other devices don't need to re-fetch recipes.
+
+**Auto-save** — triggered by a `useEffect` watching key state slices. Debounced 2 s to avoid saving mid-interaction. **Guard:** skips the save entirely if the plan contains no meals — prevents an accidental "Tøm plan" from overwriting the Drive backup with empty state.
+
+**Load** — called once on startup if already connected, and after OAuth redirect completes. Manual pull button available in settings.
+
+**Token lifecycle:**
+- PKCE verifier stored in `localStorage` (not `sessionStorage`) to survive cross-origin redirects on mobile.
+- `getValidAccessToken` refreshes the access token automatically using the stored refresh token.
+- If the refresh returns `invalid_grant` (e.g. user revoked access externally), the token is cleared and `driveStatus` is set to `'expired'`. Callers detect the `'TOKEN_EXPIRED'` sentinel and show an amber reconnect prompt in settings.
+- Disconnecting calls `https://oauth2.googleapis.com/revoke` to invalidate the token server-side before clearing localStorage.
+- `connectGoogleDrive` uses `useCallback` with `[googleClientId, googleClientSecret]` as deps — both must be in the array or the callback captures stale empty strings and silently does nothing.
 
 ---
 
@@ -218,8 +238,8 @@ Breakpoint: `window.innerWidth < 640` — tracked in `isMobile` state with a `re
 - Compact header padding (`12px 16px 10px`)
 - Week selector shown in header when `weeks > 1` — buttons 1…N set `mobileWeek` (plan view) and `shoppingWeek` (shopping view) together
 - Plan grid renders only the `mobileWeek` row instead of all weeks
-- Fixed bottom nav bar (`height: 56px`, `zIndex: 200`) with four tabs: Plan / Handleliste / Fryser / Innstillinger
-- Main content has `paddingBottom: 72px` to clear the bottom nav bar
+- Bottom nav bar (`height: 56px`) with four tabs: Plan / Handleliste / Fryser / Innstillinger. Switching tabs closes any open plan or suggestion modal.
+- Root div is `position: fixed; inset: 0; display: flex; flex-direction: column` — content scrolls inside a `flex: 1; overflow-y: auto` inner div; nav bar sits in normal flow at the bottom. This avoids iOS Safari's `position: fixed` scroll drift bug.
 - No `zoom: 1.1`
 
 **On desktop (≥ 640px):**
