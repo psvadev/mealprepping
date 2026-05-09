@@ -945,6 +945,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     if (!driveConnected) return;
     clearTimeout(driveSyncTimer.current);
     driveSyncTimer.current = setTimeout(() => {
+      const hasMeals = plan.some(week => week.some(day => day !== null));
+      if (!hasMeals) return;
       saveToDrive({ plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions,
         cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
         recipeCache, favourites, mealNotes, mealHistory, freezerItems, dislikedMeals });
