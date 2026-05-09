@@ -13,13 +13,6 @@ Would require: backend (auth, user data storage), billing, API key management on
 
 ---
 
-## Companion app ideas
-
-### Kassal price comparison
-A separate app that takes the exported shopping list JSON and finds the cheapest Norwegian store for the full basket using the Kassal API. Would need to resolve free-text ingredient names to specific SKUs across store chains and compare per-item and total prices. Could also surface active sales. Too request-heavy and out-of-scope for this app, but the JSON plan export is a natural feed for it.
-
----
-
 ## Deferred / not planned
 
 - **Per-day prep tracking** — conflicts with the batch-cook philosophy. Everything is cooked on one day; tracking per-day prep adds complexity for no gain.
@@ -29,3 +22,4 @@ A separate app that takes the exported shopping list JSON and finds the cheapest
 - **Nutritional targets** — highly individual (age, sex, weight, goals); no natural owner in a shared family tool. Better suited to a SaaS context with per-user profiles and a TDEE calculator.
 - **Weekly dessert slot** — one batch-made dessert per week alongside the dinners. Technically straightforward (section below the plan grid, same AI enrichment pattern as manual meal entry, hooks into shopping list). Deferred because it conflicts with the core philosophy: batch-cook day is already heavy; adding a mandatory dessert batch increases effort rather than reducing it. Dessert is better handled ad hoc or from a bakery.
 - **Pantry staples / carry-over ingredients** — shopping list awareness of recently purchased non-perishables (e.g. skip pepper if bought last week). No reliable way to track consumption rate or when a staple runs out without maintaining a manual pantry inventory — the overhead exceeds the benefit. The existing check-off on the shopping list already handles this in practice.
+- **Spend tracking / price history** — logging grocery spend over time would pull the app towards budgeting territory. The app's identity is batch-cook inspiration and workflow (plan → shop → freeze → reheat); price estimates are a convenience, not a core feature.
