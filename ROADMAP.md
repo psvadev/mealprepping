@@ -13,6 +13,13 @@ Would require: backend (auth, user data storage), billing, API key management on
 
 ---
 
+## Companion app ideas
+
+### Kassal price comparison
+A separate app that takes the exported shopping list JSON and finds the cheapest Norwegian store for the full basket using the Kassal API. Would need to resolve free-text ingredient names to specific SKUs across store chains and compare per-item and total prices. Could also surface active sales. Too request-heavy and out-of-scope for this app, but the JSON plan export is a natural feed for it.
+
+---
+
 ## Deferred / not planned
 
 - **Per-day prep tracking** — conflicts with the batch-cook philosophy. Everything is cooked on one day; tracking per-day prep adds complexity for no gain.
