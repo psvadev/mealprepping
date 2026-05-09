@@ -2329,7 +2329,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               );
               return (
                 <>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:14 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:14 }}>
                     <div>
                       <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
                         letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>INGREDIENSER</div>
@@ -2371,41 +2371,36 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         ))}
                       </ol>
                     </div>
-                    <div>
-                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
-                        letterSpacing:"0.8px", marginBottom:8, fontWeight:600 }}>NÆRING PER PORSJON</div>
-                      {recipe.nutrition && (
-                        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                          {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${recipe.nutrition[f.key]}${f.unit}`, color:f.color})).map(n => (
-                            <div key={n.label} style={{ display:"flex", justifyContent:"space-between",
-                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
-                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>{n.label}</span>
-                              <span style={{ fontSize:12, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
-                            </div>
-                          ))}
-                          {recipe.portionWeightGrams && (
-                            <div style={{ display:"flex", justifyContent:"space-between",
-                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
-                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Porsjonsvekt</span>
-                              <span style={{ fontSize:12, fontWeight:700, color:"#b4b2c2", fontFamily:"sans-serif" }}>ca. {recipe.portionWeightGrams} g</span>
-                            </div>
-                          )}
-                          {recipe.pricePerPortion && (
-                            <div style={{ display:"flex", justifyContent:"space-between",
-                              alignItems:"center", padding:"5px 8px", background:"#141517", borderRadius:5 }}>
-                              <span style={{ fontSize:11, color:"#b4b2c2", fontFamily:"sans-serif" }}>Pris/porsjon</span>
-                              <span style={{ fontSize:11, fontWeight:700, color:"#a8c4a8", fontFamily:"sans-serif" }}>
-                                ca. {recipe.pricePerPortion.low}–{recipe.pricePerPortion.high} kr
-                                <span style={{ fontSize:9, color:"#747280", marginLeft:4 }}>
-                                  {recipe.pricePerPortion.source==="kassal" ? "kassal.app" : "estimat"}
-                                </span>
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
+                  {recipe.nutrition && (
+                    <div style={{ borderTop:"1px solid #22232a", paddingTop:14, marginBottom:14 }}>
+                      <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
+                        letterSpacing:"0.8px", marginBottom:10, fontWeight:600 }}>
+                        NÆRING PER PORSJON{recipe.portionWeightGrams ? <span style={{ fontWeight:400, color:"#747280", marginLeft:6 }}>· ca. {recipe.portionWeightGrams} g</span> : null}
+                      </div>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${recipe.nutrition[f.key]}${f.unit}`, color:f.color})).map(n => (
+                          <div key={n.label} style={{ flex:"1 1 90px", display:"flex", flexDirection:"column",
+                            alignItems:"center", padding:"10px 8px", background:"#1c1d21", borderRadius:8, gap:4 }}>
+                            <span style={{ fontSize:14, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
+                            <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif" }}>{n.label}</span>
+                          </div>
+                        ))}
+                        {recipe.pricePerPortion && (
+                          <div style={{ flex:"1 1 90px", display:"flex", flexDirection:"column",
+                            alignItems:"center", padding:"10px 8px", background:"#1c1d21", borderRadius:8, gap:4 }}>
+                            <span style={{ fontSize:14, fontWeight:700, color:"#a8c4a8", fontFamily:"sans-serif" }}>
+                              ca. {recipe.pricePerPortion.low}–{recipe.pricePerPortion.high} kr
+                            </span>
+                            <span style={{ fontSize:9, color:"#747280", fontFamily:"sans-serif" }}>
+                              {recipe.pricePerPortion.source==="kassal" ? "kassal.app" : "AI-estimat"}
+                            </span>
+                            <span style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif" }}>Pris/porsjon</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {recipe.tips?.length > 0 && (
                     <div style={{ paddingTop:12, borderTop:"1px solid #22232a" }}>
                       <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
