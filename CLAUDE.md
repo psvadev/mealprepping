@@ -13,7 +13,6 @@ Browser-based weekly meal planner for a Norwegian family doing batch-cook meal p
 | File | Purpose |
 |------|---------|
 | `index.html` | Entire application — React components, CSS, all logic |
-| `middag-planner.jsx` | Original Claude.ai artifact (reference only, not used) |
 
 ---
 
