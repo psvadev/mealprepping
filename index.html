@@ -883,6 +883,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       if (d.units) setUnits(d.units);
       if (d.shoppingLists) setShoppingLists(d.shoppingLists);
       if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
+      if (d.recipeCache) setRecipeCache(d.recipeCache);
       if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
       if (d.favourites) setFavourites(d.favourites);
       if (d.mealNotes) setMealNotes(d.mealNotes);
@@ -946,10 +947,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     driveSyncTimer.current = setTimeout(() => {
       saveToDrive({ plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions,
         cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
-        favourites, mealNotes, mealHistory, freezerItems, dislikedMeals });
+        recipeCache, favourites, mealNotes, mealHistory, freezerItems, dislikedMeals });
     }, 2000);
     return () => clearTimeout(driveSyncTimer.current);
-  }, [plan, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, driveConnected]);
+  }, [plan, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache, driveConnected]);
 
   const printPlan = () => {
     const rows = Array.from({length:weeks},(_,w) => {
