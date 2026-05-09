@@ -91,6 +91,7 @@ Four top-level views switched by `setView(...)`:
 - **Manual meal entry** — text input below the generate/clear buttons. Typing a meal name and pressing Enter or "Legg til" calls `addManualMeal()`, which makes a small Claude call (max_tokens: 256) to enrich the name into a full meal object (`name, emoji, protein, category, prepTime, description`). The enriched meal is prepended to `suggestions`. Falls back to defaults if the API call fails. Store-bought components (pizzabunn, tortillas, etc.) are explicitly allowed in the prompt.
 - **"→ Fryser" button** — appears in the week label cell when the week has at least one non-leftover meal. Calls `addWeekToFreezer(week)`, which logs all non-leftover meals for that week to `mp_freezerItems` with `remaining = total = portions` and `cookedAt = today`, then navigates to the Fryser view.
 - **"✕ Tøm" button** — clears the plan. Located beside the generate button in the suggestions panel (not in the nav bar).
+- **Maks tid slider** — inline in the suggestions action row (beside "Tøm"), not in the header. Controls max prep time for generation and filters the visible suggestion cards client-side.
 
 ---
 
@@ -236,7 +237,7 @@ The active unit is injected as a sentence into the `fetchRecipe` and `generateSh
 Breakpoint: `window.innerWidth < 640` — tracked in `isMobile` state with a `resize` listener.
 
 **On mobile (< 640px):**
-- Header controls row hidden entirely (UKE, PORSJONER, Proteinmål, Kjøkken, Maks tid, Skriv ut)
+- Header controls row hidden entirely (UKE, PORSJONER, Proteinmål, Kjøkken, Skriv ut)
 - Compact header padding (`12px 16px 10px`)
 - Week selector shown in header when `weeks > 1` — buttons 1…N set `mobileWeek` (plan view) and `shoppingWeek` (shopping view) together
 - Plan grid renders only the `mobileWeek` row instead of all weeks
