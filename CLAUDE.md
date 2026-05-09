@@ -193,7 +193,7 @@ Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Dr
 
 ## Cuisines
 
-`CUISINE_LIBRARY` contains 19 predefined cuisines (norsk, italiensk, asiatisk, meksikansk, indisk, japansk, kinesisk, thai, gresk, midtøsten, latinamerikansk, spansk, fransk, amerikansk, vietnamesisk, koreansk, tyrkisk, afrikansk, filippinsk). No free-text entry — all cuisines come from the library.
+`CUISINE_LIBRARY` contains 19 predefined cuisines (Nordisk, Italiensk, Asiatisk, Meksikansk, Indisk, Japansk, Kinesisk, Thai, Gresk, Midtøsten, Latinamerikansk, Spansk, Fransk, Amerikansk, Vietnamesisk, Koreansk, Tyrkisk, Nordafrikansk, Filippinsk). No free-text entry — all cuisines come from the library.
 
 `enabledCuisines` (localStorage array of keys, default: the first 5) controls which appear in the Kjøkken panel. Active cuisines show their CuisineCounter + ✕ to disable. Inactive cuisines appear as dashed + chips below the active list. Disabling a cuisine also removes its target from `cuisineTargets`. `allCuisines` is derived via `useMemo` filtering `CUISINE_LIBRARY` by `enabledCuisines`.
 
