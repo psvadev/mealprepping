@@ -907,7 +907,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       prompt: 'consent'
     });
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-  }, [googleClientId]);
+  }, [googleClientId, googleClientSecret]);
 
   const disconnectGoogleDrive = useCallback(async () => {
     const t = lsGet('driveToken', null);
