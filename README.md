@@ -48,11 +48,13 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 
 ## Running locally
 
-Requires [Python 3](https://www.python.org/downloads/) — free and available from the [Microsoft Store](https://apps.microsoft.com/detail/9NRWMJP3717K) on Windows.
+Any static file server works — the app is a single HTML file with no build step. Python 3 is the easiest option on most systems:
 
 ```bash
 python3 -m http.server 8080
 ```
+
+Python 3 is free and available from the [Microsoft Store](https://apps.microsoft.com/detail/9NRWMJP3717K) on Windows. Alternatives: `npx serve`, VS Code Live Server, nginx, or any other local web server.
 
 Open `http://localhost:8080` in your browser, then go to **⚙ Innstillinger** and add your Anthropic API key.
 
