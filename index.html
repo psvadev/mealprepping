@@ -1123,7 +1123,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             <div style={{ marginLeft:"auto", display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
               <button onClick={()=>setView("plan")} style={btnTab(view==="plan")}>📅 Plan</button>
               <button onClick={()=>generateShoppingList(shoppingWeek)} style={btnTab(view==="shopping")}>
-                🛒 Handleliste{filledCount>0 ? ` (${filledCount})` : ""}
+                🛒 Handleliste
               </button>
               <button onClick={()=>setView("fryser")} style={btnTab(view==="fryser")}>
                 ❄️ Fryser{freezerItems.filter(i=>i.remaining>0).length>0 ? ` (${freezerItems.filter(i=>i.remaining>0).length})` : ""}
