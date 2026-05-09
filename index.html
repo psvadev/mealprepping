@@ -1402,6 +1402,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
             {/* Weekly nutrition summary */}
             {Array.from({length:weeks},(_,w)=>{
+              if (isMobile && w !== mobileWeek) return null;
               const s = nutritionSummary[w];
               if (s.count===0) return null;
               return (
@@ -2595,10 +2596,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:200,
           background:"#18191c", borderTop:"1px solid #2a2b30", display:"flex", height:56 }}>
           {[
-            { label:"Plan",         emoji:"📅", action:()=>setView("plan"),                          key:"plan" },
-            { label:"Handleliste",  emoji:"🛒", action:()=>generateShoppingList(shoppingWeek),       key:"shopping" },
-            { label:"Fryser",       emoji:"❄️", action:()=>setView("fryser"),                        key:"fryser" },
-            { label:"Innstillinger",emoji:"⚙",  action:()=>setView("settings"),                     key:"settings" },
+            { label:"Plan",         emoji:"📅", action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("plan"); },                          key:"plan" },
+            { label:"Handleliste",  emoji:"🛒", action:()=>{ setPlanModal(null); setSuggestionModal(null); generateShoppingList(shoppingWeek); },       key:"shopping" },
+            { label:"Fryser",       emoji:"❄️", action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("fryser"); },                        key:"fryser" },
+            { label:"Innstillinger",emoji:"⚙",  action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("settings"); },                     key:"settings" },
           ].map(tab => (
             <button key={tab.key} onClick={tab.action} style={{
               flex:1, display:"flex", flexDirection:"column", alignItems:"center",
