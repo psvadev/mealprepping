@@ -259,6 +259,7 @@ function App() {
   const [showCuisine,   setShowCuisine]   = useState(false);
   const [showFavourites,setShowFavourites]= useState(false);
   const [confirmClear,  setConfirmClear]  = useState(false);
+  const [confirmClearCache, setConfirmClearCache] = useState(false);
   const [lastShoppingKeys,setLastShoppingKeys]=useState(() => lsGet('lastShoppingKeys',{}));
   const [checkedItems,  setCheckedItems]  = useState(() => lsGet('checkedItems', {}));
   const [notesDraft,    setNotesDraft]    = useState('');
@@ -2115,7 +2116,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                   letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>RESETT</div>
                 <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <button onClick={()=>{ if(confirm("Tøm oppskriftsbufferet? Oppskrifter lastes inn på nytt ved behov.")) setRecipeCache({}); }}
+                  <button onClick={()=>setConfirmClearCache(true)}
                     style={{ padding:"7px 14px", borderRadius:7, border:"1px solid #e87060",
                       background:"#3a1a1a", color:"#e87060", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
                     Tøm oppskriftsbuffer
@@ -2147,7 +2148,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.remaining>0))}
                   style={{ padding:"6px 12px", borderRadius:7, border:"1px solid #e87060",
                     background:"#3a1a1a", color:"#e87060", cursor:"pointer",
-                    fontSize:11, fontFamily:"sans-serif" }}>Tøm tomme</button>
+                    fontSize:11, fontFamily:"sans-serif" }}>Fjern tomme</button>
               )}
             </div>
 
@@ -2280,6 +2281,30 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <button onClick={clearPlan} style={{ padding:"8px 20px", borderRadius:8, border:"none",
                 background:"#5a2020", color:"#f0c0c0", cursor:"pointer", fontSize:13,
                 fontFamily:"sans-serif", fontWeight:700 }}>Ja, tøm planen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM CLEAR CACHE MODAL ── */}
+      {confirmClearCache && (
+        <div onClick={()=>setConfirmClearCache(false)} style={{ position:"fixed", inset:0,
+          background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex",
+          alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#18191c", border:"1px solid #3a2a2a",
+            borderRadius:14, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
+            <div style={{ fontSize:28, marginBottom:12 }}>🗑</div>
+            <h2 style={{ margin:"0 0 8px", fontSize:16, color:"#e4ddd0" }}>Tøm oppskriftsbufferet?</h2>
+            <p style={{ margin:"0 0 24px", fontSize:13, color:"#a8a6b6", fontFamily:"sans-serif", lineHeight:1.6 }}>
+              Oppskrifter lastes inn på nytt ved behov.
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button onClick={()=>setConfirmClearCache(false)} style={{ padding:"8px 20px", borderRadius:8,
+                border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
+                cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Avbryt</button>
+              <button onClick={()=>{ setRecipeCache({}); setConfirmClearCache(false); }} style={{ padding:"8px 20px", borderRadius:8, border:"none",
+                background:"#5a2020", color:"#f0c0c0", cursor:"pointer", fontSize:13,
+                fontFamily:"sans-serif", fontWeight:700 }}>Ja, tøm bufferet</button>
             </div>
           </div>
         </div>
