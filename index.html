@@ -455,7 +455,7 @@ function App() {
         } else {
           updated.push({ id: `${Date.now()}-${m.name}`, name: m.name,
             emoji: m.emoji || '🍽', protein: m.protein,
-            remaining: portions, total: portions, cookedAt: today });
+            remaining: portions, total: portions, portionCount: portions, cookedAt: today });
         }
       });
       return updated;
@@ -2232,13 +2232,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                 style={{ width:28, height:28, borderRadius:6, border:"1px solid #2a2b30",
                                   background:"#141517", color:"#e4ddd0", cursor:"pointer",
                                   fontSize:16, fontFamily:"sans-serif", lineHeight:1 }}>−</button>
-                              <span style={{ fontSize:12, fontFamily:"sans-serif", color:"#b4b2c2",
-                                minWidth:48, textAlign:"center" }}>{item.remaining}/{item.total}</span>
-                              <button onClick={()=>setFreezerItems(prev=>prev.map(i=>i.id===item.id?{...i,remaining:Math.min(i.total,i.remaining+1)}:i))}
-                                disabled={item.remaining >= item.total}
+                              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", minWidth:56 }}>
+                                <span style={{ fontSize:12, fontFamily:"sans-serif", color:"#e4ddd0" }}>{item.remaining} bokser</span>
+                                <span style={{ fontSize:10, fontFamily:"sans-serif", color:"#747280" }}>{item.portionCount ?? item.total} pors.</span>
+                              </div>
+                              <button onClick={()=>setFreezerItems(prev=>prev.map(i=>i.id===item.id && i.remaining<40?{...i,remaining:i.remaining+1,total:Math.max(i.total,i.remaining+1)}:i))}
+                                disabled={item.remaining >= 40}
                                 style={{ width:28, height:28, borderRadius:6, border:"1px solid #2a2b30",
-                                  background:"#141517", color: item.remaining >= item.total ? "#3a3b40" : "#e4ddd0",
-                                  cursor: item.remaining >= item.total ? "default" : "pointer",
+                                  background:"#141517", color: item.remaining >= 40 ? "#3a3b40" : "#e4ddd0",
+                                  cursor: item.remaining >= 40 ? "default" : "pointer",
                                   fontSize:16, fontFamily:"sans-serif", lineHeight:1 }}>+</button>
                             </div>
                           )}
