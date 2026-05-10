@@ -112,7 +112,7 @@ Freezer inventory for tracking batch-cooked portions.
 - Each item row: emoji + name + `ProteinBadge` + `remaining/total` counter with **−** / **+** buttons + **✕** remove.
 - Depleted items (`remaining === 0`): 40% opacity, "Tomt" label replaces the −/+ controls.
 - Items ≥ 90 days old: amber `⚠ Nd gammel` badge shown next to the protein pill; card border shifts to amber tint (`#4a3a1a`).
-- "Tøm tomme" button (top-right) — removes all depleted items. Only shown when at least one item is depleted.
+- "Fjern tomme" button (top-right) — removes all depleted items. Only shown when at least one item is depleted.
 - Empty state message with instructions to use "→ Fryser" in the plan view.
 
 **`addWeekToFreezer(week)`** — collects all non-null, non-leftover meals for the week, maps each to a freezer entry (`remaining = total = portions`), appends to `freezerItems`, then navigates to `"fryser"` view.
@@ -217,7 +217,7 @@ Sections (in display order):
 5. **Favoritter** — all starred meals shown as chips with per-item ✕ removal and a "Tøm alle" button. Empty state prompts to use ★ on a suggestion or in the plan.
 6. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
 7. **Mathistorikk** — scrollable wrapped list of recent meals as chips, with count and "Tøm historikk" button. Empty state explains meals are added automatically when assigned to the plan.
-8. **Data** — export plan (.json), import plan (.json), export shopping list (.txt). Sub-section **Resett**: "Tøm oppskriftsbuffer" (clears `mp_recipeCache`) and "Tøm ukeplan" (clears plan + suggestions + shopping lists) with confirmation.
+8. **Data** — export plan (.json), import plan (.json), export shopping list (.txt). Sub-section **Resett**: "Tøm oppskriftsbuffer" (clears `mp_recipeCache`) and "Tøm ukeplan" (clears plan + suggestions + shopping lists) — both use a custom confirmation modal.
 
 ---
 
