@@ -2135,7 +2135,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   <span style={{ marginLeft:8, fontSize:11, fontWeight:400, color:"#7abf7a",
                     background:"#1a2a1a", border:"1px solid #2a3a2a", borderRadius:10,
                     padding:"2px 8px", fontFamily:"sans-serif" }}>
-                    {freezerItems.filter(i=>i.remaining>0).reduce((s,i)=>s+i.remaining,0)} bokser igjen
+                    {freezerItems.filter(i=>i.remaining>0).length} middager igjen
                   </span>
                 )}
               </h2>
