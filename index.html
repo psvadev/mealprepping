@@ -2169,7 +2169,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                           letterSpacing:"0.8px", fontWeight:600 }}>
-                          LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
+                          LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()} · {items[0].portionCount ?? items[0].total} PORSJONER
                         </div>
                         {isOld    && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
                           border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
@@ -2232,10 +2232,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                 style={{ width:28, height:28, borderRadius:6, border:"1px solid #2a2b30",
                                   background:"#141517", color:"#e4ddd0", cursor:"pointer",
                                   fontSize:16, fontFamily:"sans-serif", lineHeight:1 }}>−</button>
-                              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", minWidth:56 }}>
-                                <span style={{ fontSize:12, fontFamily:"sans-serif", color:"#e4ddd0" }}>{item.remaining} bokser</span>
-                                <span style={{ fontSize:10, fontFamily:"sans-serif", color:"#747280" }}>{item.portionCount ?? item.total} pors.</span>
-                              </div>
+                              <span style={{ fontSize:12, fontFamily:"sans-serif", color:"#e4ddd0", minWidth:56, textAlign:"center" }}>{item.remaining} bokser</span>
                               <button onClick={()=>setFreezerItems(prev=>prev.map(i=>i.id===item.id && i.remaining<40?{...i,remaining:i.remaining+1,total:Math.max(i.total,i.remaining+1)}:i))}
                                 disabled={item.remaining >= 40}
                                 style={{ width:28, height:28, borderRadius:6, border:"1px solid #2a2b30",
