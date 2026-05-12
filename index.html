@@ -1717,6 +1717,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               const visibleCategories = allFrozen
                 ? sl.categories.filter(c => c.name !== 'Har du dette hjemme?')
                 : sl.categories;
+              const estimatedMeals = weekMeals.filter(m => {
+                const cached = recipeCache[m.name];
+                if (!cached) return true;
+                const ings = cached.components ? cached.components.flatMap(c => c.ingredients) : (cached.ingredients || []);
+                return ings.length === 0;
+              });
               return (
                 <>
                   {frozenMeals.length > 0 && (
@@ -1727,6 +1733,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         : frozenMeals.length === 1
                           ? `${frozenMeals[0].name} ligger allerede i fryseren og er ${frozenMeals[0].remaining >= portions ? "ikke inkludert i listen" : "skalert ned"}.`
                           : `${frozenMeals.length} av ${weekMeals.length} måltider ligger allerede i fryseren og er ikke inkludert i listen.`}
+                    </div>
+                  )}
+                  {estimatedMeals.length > 0 && (
+                    <div style={{ background:"#1c1a12", border:"1px solid #3a3015", borderRadius:8,
+                      padding:"10px 14px", marginBottom:14, fontSize:12, color:"#c8a84a", fontFamily:"sans-serif" }}>
+                      ⚠ {estimatedMeals.length === weekMeals.length
+                        ? "Ingen oppskrifter er lastet — mengder er estimert av AI."
+                        : `${estimatedMeals.length} av ${weekMeals.length} retter mangler oppskrift — mengder er estimert.`}
                     </div>
                   )}
                   {sl.totalPrice && !allFrozen && sl.totalPrice.high > 0 && (
@@ -1784,7 +1798,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <div style={{ textAlign:"center", padding:"40px 20px", color:"#747280",
                 fontFamily:"sans-serif", fontSize:13, border:"1px dashed #22232a", borderRadius:12 }}>
                 <div style={{ marginBottom:16 }}>Ingen handleliste for denne uken ennå.</div>
-                <button onClick={generateShoppingList} style={{
+                <button onClick={()=>generateShoppingList()} style={{
                   padding:"10px 20px", borderRadius:8, border:"none",
                   background:"#e8a838", color:"#0e0f11", cursor:"pointer",
                   fontSize:13, fontWeight:600, fontFamily:"sans-serif"
