@@ -709,9 +709,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   // ── Shopping list ─────────────────────────────────────────────────────────
   const generateShoppingList = async (week, force=false) => {
     if (week === undefined) week = shoppingWeek;
+    setShoppingWeek(week);
+    setView("shopping");
+    const wKey = weekPlanKey(week);
+    if (!force && shoppingLists[week] && wKey===lastShoppingKeys[week]) return;
     const plannedMeals = [];
     for (let d=0;d<7;d++) if (plan[week]?.[d] && !plan[week][d].leftover) plannedMeals.push(plan[week][d].name);
-    if (!plannedMeals.length) { setError(`Ingen middager planlagt for uke ${week+1}.`); setView("shopping"); return; }
+    if (!plannedMeals.length) { setError(`Ingen middager planlagt for uke ${week+1}.`); return; }
     const freezerNote = (() => {
       const matches = freezerItems.filter(f =>
         f.remaining > 0 &&
@@ -727,10 +731,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       });
       return `\n\nFølgende middager finnes allerede i fryseren:\n${lines.join('\n')}\nJuster handlelisten deretter.`;
     })();
-    setShoppingWeek(week);
-    setView("shopping");
-    const wKey = weekPlanKey(week);
-    if (!force && shoppingLists[week] && wKey===lastShoppingKeys[week]) return;
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
     setShoppingLoading(true); setError(null); setRetryFn(null);
     const mealLines = plannedMeals.map((name, i) => {
