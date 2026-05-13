@@ -1448,13 +1448,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             )}
 
             {/* Weekly batch time estimate */}
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:8 }}>
             {Array.from({length:weeks},(_,w)=>{
               if (isMobile && w !== mobileWeek) return null;
               const bt = batchTimeSummary[w];
               if (bt.count === 0 || !bt.allLoaded) return null;
               const over8h = bt.estimated > 480;
               return (
-                <div key={w} style={{ marginBottom:8, width:"fit-content", background:"#18191c",
+                <div key={w} style={{ width:"fit-content", background:"#18191c",
                   border:`1px solid ${over8h?"#3a3015":"#22232a"}`, borderRadius:8, padding:"6px 12px",
                   display:"flex", alignItems:"center", gap:10, fontFamily:"sans-serif", fontSize:11 }}>
                   <span style={{ color:"#747280", letterSpacing:"0.05em", fontWeight:600, fontSize:10 }}>
@@ -1469,6 +1470,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 </div>
               );
             })}
+            </div>
 
             {/* Weekly nutrition summary */}
             {Array.from({length:weeks},(_,w)=>{
