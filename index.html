@@ -410,16 +410,23 @@ function App() {
 
   const batchTimeSummary = useMemo(() =>
     Array.from({length: weeks}, (_, w) => {
-      let total = 0, longest = 0, count = 0;
+      let sumActive = 0, count = 0;
+      const passiveTimes = [];
       for (let d = 0; d < 7; d++) {
         const m = plan[w][d];
         if (!m || m.leftover) continue;
-        const mins = parseInt(m.prepTime);
-        if (!isNaN(mins)) { total += mins; if (mins > longest) longest = mins; count++; }
+        const r = recipeCache[m.name];
+        const active = r?.activeMins ?? parseInt(m.prepTime) ?? 0;
+        const passive = r?.passiveMins ?? 0;
+        if (!isNaN(active)) { sumActive += active; count++; }
+        if (!isNaN(passive) && passive > 0) passiveTimes.push(passive);
       }
-      return { total, longest, count };
+      passiveTimes.sort((a, b) => b - a);
+      let passiveEst = 0;
+      for (let i = 0; i < passiveTimes.length; i += 3) passiveEst += passiveTimes[i];
+      return { estimated: sumActive + passiveEst, count };
     }),
-  [plan, weeks]);
+  [plan, weeks, recipeCache]);
 
   const fmtBatchTime = mins => {
     const h = Math.floor(mins / 60), m = mins % 60;
@@ -572,7 +579,7 @@ function App() {
             content:`Svar alltid på norsk bokmål.\n\nGi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk norske måleenheter og forkortelser: g, kg, dl, ml, l, ss (spiseskje), ts (teskje), stk, fedd, klype, neve."
-            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan akkurat denne retten best pakkes og fryses, og hvordan den varmes opp best. Vær eksplisitt på oppvarmingsmetode: retter med sprø overflate (ovnsretter, gratenger, panerte retter) bør ovn anbefales — ikke mikrobølgeovn. Supper, gryter og sauser varmes fint i mikro eller kjele. Vær spesifikk for retten — unngå generiske råd som "frys i porsjonsbokser". Unngå tips om ferske sider eller noe som lages ved servering – alt skjer på batch-dagen. Estimer også total porsjonsvekt i gram (inkl. saus/kraft) og legg i "portionWeightGrams". Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg).\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "portionWeightGrams": 420,\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Frys i flate bokser — da tiner det jevnt.", "Varm i ovn på 180°C i 15 min for sprø topp — mikro gjør bunnen seig."]\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
+            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan akkurat denne retten best pakkes og fryses, og hvordan den varmes opp best. Vær eksplisitt på oppvarmingsmetode: retter med sprø overflate (ovnsretter, gratenger, panerte retter) bør ovn anbefales — ikke mikrobølgeovn. Supper, gryter og sauser varmes fint i mikro eller kjele. Vær spesifikk for retten — unngå generiske råd som "frys i porsjonsbokser". Unngå tips om ferske sider eller noe som lages ved servering – alt skjer på batch-dagen. Estimer også total porsjonsvekt i gram (inkl. saus/kraft) og legg i "portionWeightGrams". Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg).\nInkluder også "activeMins" (heltall, minutter med aktiv tilberedning — f.eks. kutte, steke, røre) og "passiveMins" (heltall, minutter der retten passer seg selv — f.eks. i ovn eller koker). Sum av disse skal tilsvare total tilberedningstid.\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "portionWeightGrams": 420,\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Frys i flate bokser — da tiner det jevnt.", "Varm i ovn på 180°C i 15 min for sprø topp — mikro gjør bunnen seig."],\n  "activeMins": 25,\n  "passiveMins": 35\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
           }]
         })
       });
@@ -1444,7 +1451,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               if (isMobile && w !== mobileWeek) return null;
               const bt = batchTimeSummary[w];
               if (bt.count === 0) return null;
-              const over8h = bt.total > 480;
+              const over8h = bt.estimated > 480;
               return (
                 <div key={w} style={{ marginBottom:8, width:"fit-content", background:"#18191c",
                   border:`1px solid ${over8h?"#3a3015":"#22232a"}`, borderRadius:8, padding:"6px 12px",
@@ -1455,7 +1462,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   <span style={{ color:"#b4b2c2" }}>{bt.count} retter</span>
                   <span style={{ color:"#2a2b30" }}>|</span>
                   <span style={{ color: over8h ? "#c8a84a" : "#e4ddd0", fontWeight:600 }}>
-                    {over8h ? "⚠ " : ""}≈ {fmtBatchTime(bt.longest)} – {fmtBatchTime(bt.total)}
+                    {over8h ? "⚠ " : ""}≈ {fmtBatchTime(bt.estimated)}
                   </span>
                 </div>
               );
