@@ -762,6 +762,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     })();
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
     setShoppingLoading(true); setError(null); setRetryFn(null);
+    let cachedMealsCount = 0;
     const mealLines = plannedMeals.map((name, i) => {
       const cached = recipeCache[name];
       if (cached) {
@@ -769,6 +770,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           ? cached.components.flatMap(c => c.ingredients)
           : (cached.ingredients || []);
         if (ingredients.length) {
+          cachedMealsCount++;
           return `${i+1}. ${name}\n   Ingredienser (allerede skalert til ${portions} porsjoner):\n${ingredients.map(ing => `   - ${ing}`).join('\n')}`;
         }
       }
@@ -796,7 +798,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.categories) {
-        setShoppingLists(prev=>({...prev,[week]:parsed}));
+        setShoppingLists(prev=>({...prev,[week]:{...parsed, cachedMealsCount}}));
         setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
         setCheckedItems(prev=>{ const n={...prev}; delete n[week]; return n; });
       } else { setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`); setRetryFn(() => () => generateShoppingList(week, true)); }
@@ -1795,6 +1797,18 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       ⚠ {estimatedMeals.length === weekMeals.length
                         ? "Ingen oppskrifter er lastet — mengder er estimert av AI."
                         : `${estimatedMeals.length} av ${weekMeals.length} retter mangler oppskrift — mengder er estimert.`}
+                    </div>
+                  )}
+                  {estimatedMeals.length === 0 && sl.cachedMealsCount !== undefined && sl.cachedMealsCount < weekMeals.length && (
+                    <div style={{ background:"#121c14", border:"1px solid #1e3a22", borderRadius:8,
+                      padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7acf8a", fontFamily:"sans-serif",
+                      display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+                      <span>✓ Alle oppskrifter er nå lastet — generer listen på nytt for nøyaktige ingrediensmengder.</span>
+                      <button onClick={() => generateShoppingList(shoppingWeek, true)} style={{
+                        background:"#1e3a22", border:"1px solid #2a5030", borderRadius:6,
+                        color:"#7acf8a", fontSize:11, fontFamily:"sans-serif", padding:"4px 10px",
+                        cursor:"pointer", whiteSpace:"nowrap", flexShrink:0
+                      }}>Generer på nytt</button>
                     </div>
                   )}
                   {sl.totalPrice && !allFrozen && sl.totalPrice.high > 0 && (
