@@ -19,7 +19,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Favourites** — star meals to reuse them across weeks
 - **Meal history** — tracks recent meals and tells the AI to avoid repeating them
 - **Notes per meal** — free-text notes saved with each planned meal
-- **Batch day time estimate** — realistic single-time estimate per week using active + passive cooking time split: hands-on prep is counted serially, unattended cooking (oven, boiling) assumes 4 concurrent slots (1 oven + 3 burner simmers); improves as recipes are loaded
+- **Batch day time estimate** — realistic single-time estimate per week using active + passive cooking time split: hands-on prep is counted serially, unattended cooking (oven, boiling) assumes 4 concurrent slots (1 oven + 3 burner simmers); improves as recipes are loaded. Tip: lower the max prep time slider to reduce total batch day duration
 - **Weekly nutrition summary** — calories, protein, fat, carbs, and fibre summed per week from cached recipes
 - **Cuisine library** — 19 predefined cuisines (Italian, Asian, Filipino, etc.) to set weekly targets
 - **Metric / imperial toggle** — switch between g/kg/dl and oz/lbs/cups; clears cached recipes so units are consistent
