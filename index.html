@@ -109,6 +109,7 @@ function parseMeals(text) {
     return null;
   }
 }
+const getIngredients = r => r.components ? r.components.flatMap(c => c.ingredients) : (r.ingredients || []);
 
 function downloadFile(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType });
@@ -588,7 +589,7 @@ function App() {
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed) {
-        const flatIngredients = parsed.components ? parsed.components.flatMap(c=>c.ingredients) : parsed.ingredients;
+        const flatIngredients = getIngredients(parsed);
         if (kassalKey && flatIngredients?.length) {
           const kp = await fetchKassalPrice(flatIngredients);
           if (kp) parsed.pricePerPortion = kp;
@@ -762,15 +763,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     })();
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
     setShoppingLoading(true); setError(null); setRetryFn(null);
-    let cachedMealsCount = 0;
+    const cachedMealsCount = plannedMeals.filter(name => {
+      const cached = recipeCache[name];
+      return cached && getIngredients(cached).length > 0;
+    }).length;
     const mealLines = plannedMeals.map((name, i) => {
       const cached = recipeCache[name];
       if (cached) {
-        const ingredients = cached.components
-          ? cached.components.flatMap(c => c.ingredients)
-          : (cached.ingredients || []);
+        const ingredients = getIngredients(cached);
         if (ingredients.length) {
-          cachedMealsCount++;
           return `${i+1}. ${name}\n   Ingredienser (allerede skalert til ${portions} porsjoner):\n${ingredients.map(ing => `   - ${ing}`).join('\n')}`;
         }
       }
@@ -1776,8 +1777,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               const estimatedMeals = weekMeals.filter(m => {
                 const cached = recipeCache[m.name];
                 if (!cached) return true;
-                const ings = cached.components ? cached.components.flatMap(c => c.ingredients) : (cached.ingredients || []);
-                return ings.length === 0;
+                return getIngredients(cached).length === 0;
               });
               return (
                 <>
@@ -1803,7 +1803,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     <div style={{ background:"#121c14", border:"1px solid #1e3a22", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7acf8a", fontFamily:"sans-serif",
                       display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
-                      <span>✓ Alle oppskrifter er nå lastet — generer listen på nytt for nøyaktige ingrediensmengder.</span>
+                      ✓ Alle oppskrifter er nå lastet — generer listen på nytt for nøyaktige ingrediensmengder.
                       <button onClick={() => generateShoppingList(shoppingWeek, true)} style={{
                         background:"#1e3a22", border:"1px solid #2a5030", borderRadius:6,
                         color:"#7acf8a", fontSize:11, fontFamily:"sans-serif", padding:"4px 10px",
