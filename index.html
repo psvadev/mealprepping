@@ -410,12 +410,13 @@ function App() {
 
   const batchTimeSummary = useMemo(() =>
     Array.from({length: weeks}, (_, w) => {
-      let sumActive = 0, count = 0;
+      let sumActive = 0, count = 0, allLoaded = true;
       const passiveTimes = [];
       for (let d = 0; d < 7; d++) {
         const m = plan[w][d];
         if (!m || m.leftover) continue;
         const r = recipeCache[m.name];
+        if (r?.activeMins == null) allLoaded = false;
         const active = r?.activeMins ?? parseInt(m.prepTime) ?? 0;
         const passive = r?.passiveMins ?? 0;
         if (!isNaN(active)) { sumActive += active; count++; }
@@ -424,7 +425,7 @@ function App() {
       passiveTimes.sort((a, b) => b - a);
       let passiveEst = 0;
       for (let i = 0; i < passiveTimes.length; i += 4) passiveEst += passiveTimes[i];
-      return { estimated: sumActive + passiveEst, count };
+      return { estimated: sumActive + passiveEst, count, allLoaded };
     }),
   [plan, weeks, recipeCache]);
 
@@ -1450,7 +1451,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {Array.from({length:weeks},(_,w)=>{
               if (isMobile && w !== mobileWeek) return null;
               const bt = batchTimeSummary[w];
-              if (bt.count === 0) return null;
+              if (bt.count === 0 || !bt.allLoaded) return null;
               const over8h = bt.estimated > 480;
               return (
                 <div key={w} style={{ marginBottom:8, width:"fit-content", background:"#18191c",
