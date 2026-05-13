@@ -423,7 +423,7 @@ function App() {
       }
       passiveTimes.sort((a, b) => b - a);
       let passiveEst = 0;
-      for (let i = 0; i < passiveTimes.length; i += 3) passiveEst += passiveTimes[i];
+      for (let i = 0; i < passiveTimes.length; i += 4) passiveEst += passiveTimes[i];
       return { estimated: sumActive + passiveEst, count };
     }),
   [plan, weeks, recipeCache]);
@@ -1464,6 +1464,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   <span style={{ color: over8h ? "#c8a84a" : "#e4ddd0", fontWeight:600 }}>
                     {over8h ? "⚠ " : ""}≈ {fmtBatchTime(bt.estimated)}
                   </span>
+                  <span style={{ color:"#4a4a5a", fontSize:10 }}>3 koketopper + ovn</span>
                 </div>
               );
             })}
