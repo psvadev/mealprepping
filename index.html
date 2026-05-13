@@ -410,14 +410,14 @@ function App() {
 
   const batchTimeSummary = useMemo(() =>
     Array.from({length: weeks}, (_, w) => {
-      let total = 0, count = 0;
+      let total = 0, longest = 0, count = 0;
       for (let d = 0; d < 7; d++) {
         const m = plan[w][d];
         if (!m || m.leftover) continue;
         const mins = parseInt(m.prepTime);
-        if (!isNaN(mins)) { total += mins; count++; }
+        if (!isNaN(mins)) { total += mins; if (mins > longest) longest = mins; count++; }
       }
-      return { total, count };
+      return { total, longest, count };
     }),
   [plan, weeks]);
 
@@ -1446,15 +1446,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               if (bt.count === 0) return null;
               const over8h = bt.total > 480;
               return (
-                <div key={w} style={{ marginBottom:8, background:"#18191c", border:`1px solid ${over8h?"#3a3015":"#22232a"}`,
-                  borderRadius:8, padding:"10px 16px", display:"flex", alignItems:"center",
-                  justifyContent:"space-between", fontFamily:"sans-serif", fontSize:12 }}>
+                <div key={w} style={{ marginBottom:8, width:"fit-content", background:"#18191c",
+                  border:`1px solid ${over8h?"#3a3015":"#22232a"}`, borderRadius:8, padding:"6px 12px",
+                  display:"flex", alignItems:"center", gap:10, fontFamily:"sans-serif", fontSize:11 }}>
                   <span style={{ color:"#747280", letterSpacing:"0.05em", fontWeight:600, fontSize:10 }}>
                     KOKETID UKE {w+1}
-                    <span style={{ color:"#b4b2c2", marginLeft:8, fontWeight:400, fontSize:11 }}>{bt.count} retter</span>
                   </span>
+                  <span style={{ color:"#b4b2c2" }}>{bt.count} retter</span>
+                  <span style={{ color:"#2a2b30" }}>|</span>
                   <span style={{ color: over8h ? "#c8a84a" : "#e4ddd0", fontWeight:600 }}>
-                    {over8h ? "⚠ " : ""}≈ {fmtBatchTime(bt.total)}
+                    {over8h ? "⚠ " : ""}≈ {fmtBatchTime(bt.longest)} – {fmtBatchTime(bt.total)}
                   </span>
                 </div>
               );
