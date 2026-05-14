@@ -1673,6 +1673,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         opacity:dragMeal?.name===meal.name?0.4:1,
                         display:"flex", flexDirection:"column" }}>
                       <div style={{ position:"absolute", top:8, right:8, display:"flex", alignItems:"center", gap:4 }}>
+                        {meal.batchScore && <span style={{ fontSize:10, color:"#747280", lineHeight:1 }} title="Manuelt lagt til">✏</span>}
                         <span style={{ fontSize:9, padding:"2px 6px", background:"#141517",
                           borderRadius:10, color:"#747280", fontFamily:"sans-serif", whiteSpace:"nowrap" }}>⏱ {meal.prepTime}</span>
                         <button onClick={e=>{e.stopPropagation();toggleFavourite(meal);}} style={{
@@ -1695,7 +1696,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         <div style={{ marginTop:6, fontSize:10, letterSpacing:1,
                           color: meal.batchScore >= 4 ? '#7acf8a' : meal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
                           fontFamily:"sans-serif" }}>
-                          {'✏ '}{'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
+                          {'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
                         </div>
                       )}
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
