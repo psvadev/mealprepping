@@ -87,9 +87,9 @@ Four top-level views switched by `setView(...)`:
 - **Load all recipes button** — "Last alle oppskrifter" appears above the nutrition summary when uncached planned meals exist. Calls `fetchAllRecipes()` which iterates unique planned meals and fetches each sequentially.
 - **Progress bar** — filled days vs. total slots for active weeks.
 - **Favourites panel** — toggled via ★ button. Shows starred meals as draggable chips; clicking one adds it back to the suggestion list.
-- **Suggestion cards** — grid of AI-generated meals. Click to expand inline (full-width) showing name, cuisine, protein type, and prep time. Recipe is **not** fetched on expand — only fetched when opened via plan modal. Drag to grid or click in select mode to assign.
+- **Suggestion cards** — grid of AI-generated meals. Clicking a card opens the suggestion modal (full detail overlay) showing name, badges, description, and a "Last inn oppskrift" button. Recipe is **not** fetched on card click — only fetched when a meal is already in the plan. Drag to grid or click in select mode to assign. Manually added cards additionally show a ✏ pencil icon in the top-right (beside the prep time badge) and a snowflake batch score (`❄❄···`) on their own row below the protein/category badges.
 - **Filters** — filter suggestions by protein type. Applied client-side, no re-fetch.
-- **Manual meal entry** — text input below the generate/clear buttons. Typing a meal name and pressing Enter or "Legg til" calls `addManualMeal()`, which makes a small Claude call (max_tokens: 256) to enrich the name into a full meal object (`name, emoji, protein, category, prepTime, description`). The enriched meal is prepended to `suggestions`. Falls back to defaults if the API call fails. Store-bought components (pizzabunn, tortillas, etc.) are explicitly allowed in the prompt.
+- **Manual meal entry** — text input below the generate/clear buttons. Typing a meal name and pressing Enter or "Legg til" calls `addManualMeal()`, which makes a small Claude call (max_tokens: 256) to enrich the name into a full meal object (`name, emoji, protein, category, prepTime, description, batchScore`). `batchScore` is 1–5: how well the dish suits batch cooking and freezing (1 = poor, e.g. sushi; 5 = ideal, e.g. stews). The enriched meal is prepended to `suggestions`. Falls back to defaults if the API call fails. Store-bought components (pizzabunn, tortillas, etc.) are explicitly allowed in the prompt. AI-generated suggestions intentionally omit `batchScore` — they are already enforced batch-friendly by the prompt, so a score would always be high and uninformative. The suggestion modal shows a scored block with a spelled-out label ("Ikke egnet for batch", "Perfekt for batch", etc.) and a tinted border when `batchScore` is present.
 - **"→ Fryser" button** — appears in the week label cell when the week has at least one non-leftover meal. Calls `addWeekToFreezer(week)`, which logs all non-leftover meals for that week to `mp_freezerItems` with `remaining = total = portions` and `cookedAt = today`, then navigates to the Fryser view.
 - **"✕ Tøm" button** — clears the plan. Located beside the generate button in the suggestions panel (not in the nav bar).
 - **Maks tid slider** — inline in the suggestions action row (beside "Tøm"), not in the header. Controls max prep time for generation and filters the visible suggestion cards client-side.
@@ -102,21 +102,24 @@ Freezer inventory for tracking batch-cooked portions.
 
 **Data model** — each entry in `mp_freezerItems`:
 ```js
-{ id, name, emoji, protein, remaining, total, cookedAt }
+{ id, name, emoji, protein, remaining, total, cookedAt, freezerLifeDays }
 // id: `${Date.now()}-${name}` — unique key
 // cookedAt: "YYYY-MM-DD" ISO string
+// freezerLifeDays: nullable integer — max recommended days in freezer, copied from recipeCache at log time; null if recipe not yet fetched
 ```
+
+**`FREEZER_LIFE_DEFAULTS`** — protein-type fallback shelf lives used when `freezerLifeDays` is null: `{ fisk: 60, kylling: 90, kjott: 90, vegeta: 90 }`. Fish dishes default to 60 days; all others to 90.
 
 **Layout:**
 - Header: "🧊 Fryser" + green badge showing total active portions remaining. Tab label also shows active count.
 - Items grouped by `cookedAt` date, most recent first. Date heading in Norwegian locale: `LAGET DD. MMMM YYYY`.
 - Each item row: emoji + name + `ProteinBadge` + `remaining/total` counter with **−** / **+** buttons + **✕** remove.
 - Depleted items (`remaining === 0`): 40% opacity, "Tomt" label replaces the −/+ controls.
-- Items ≥ 90 days old: amber `⚠ Nd gammel` badge shown next to the protein pill; card border shifts to amber tint (`#4a3a1a`).
+- **Age warnings** — computed per date-group (all items cooked on the same day). `batchShelfLife` = `Math.min` of each item's `freezerLifeDays || FREEZER_LIFE_DEFAULTS[protein] || 90`. Two states: `isOld` (age ≥ shelfLife) shows amber `⚠ Nd gammel` badge + amber border tint (`#4a3a1a`); `isAgeing` (within 14 days of limit) shows `⏰ N dager igjen`. The batch warns based on its most perishable item — health/safety motivation (e.g. a fish gratin at 55 days should warn even if other items in the batch are fine).
 - "Fjern tomme" button (top-right) — removes all depleted items. Only shown when at least one item is depleted.
 - Empty state message with instructions to use "→ Fryser" in the plan view.
 
-**`addWeekToFreezer(week)`** — collects all non-null, non-leftover meals for the week, maps each to a freezer entry (`remaining = total = portions`), appends to `freezerItems`, then navigates to `"fryser"` view.
+**`addWeekToFreezer(week)`** — collects all non-null, non-leftover meals for the week, maps each to a freezer entry (`remaining = total = portions`), reads `freezerLifeDays` from `recipeCache[meal.name]` if available (null otherwise), appends to `freezerItems`, then navigates to `"fryser"` view.
 
 **Ratings** — 👍 / 👎 buttons appear on a Fryser item row once `remaining < total` (at least one portion eaten). 👍 adds the meal to `mp_favourites` (same object shape as suggestion cards) and removes it from `dislikedMeals`. 👎 adds the meal name to `mp_dislikedMeals` and removes it from favourites. The buttons toggle their border/background to show the active state. A "👎 Likt ikke" badge appears in the item's subtitle row when it's in the disliked list. `mp_dislikedMeals` is viewable and clearable per-item (or all at once) in Innstillinger → Liker ikke.
 
@@ -134,7 +137,7 @@ Freezer inventory for tracking batch-cooked portions.
 - Meal history (`mp_mealHistory`, last 30 entries) — avoids long-term repetition
 
 ### Fetch recipe — `fetchRecipe(meal)`
-`POST /v1/messages` — returns `{ components: [{name, ingredients[]}], steps, nutrition, pricePerPortion?, tips? }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card expand** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). Prompt explicitly requests 1–3 batch/freeze tips (`tips` array) — how to pack and freeze the dish, and the best reheating method (oven, microwave, pan). Tips must not suggest any per-dinner prep or fresh components. Tips are displayed in the plan modal and in suggestion card expanded view when cached. Old cached recipes with flat `ingredients[]` still render correctly via a backward-compatible fallback in the modal.
+`POST /v1/messages` — returns `{ components: [{name, ingredients[]}], steps, nutrition, pricePerPortion?, tips?, activeMins, passiveMins, freezerLifeDays }`. Called when a plan modal is opened or via the "Last alle oppskrifter" button. **Not called on suggestion card click** — recipe is only fetched when a meal is already in the plan. Result cached in `mp_recipeCache`. Prompt scales ingredients to the configured `portions` count; nutrition is always requested per 1 portion. AI always estimates `pricePerPortion`; Kassal overrides it if it finds at least 1 price match. Prompt includes the active unit system (metric: g/kg/dl/ml; imperial: oz/lbs/cups/fl oz). Prompt explicitly requests 1–3 batch/freeze tips (`tips` array) — how to pack and freeze the dish, and the best reheating method (oven, microwave, pan). Tips must not suggest any per-dinner prep or fresh components. Tips are displayed in the plan modal when cached. `freezerLifeDays` is an integer representing the recommended maximum days in the freezer for this specific dish (e.g. 60 for fish, 90 for meat stews, 120 for some chicken dishes) — stored in the cache and copied to freezer entries when the week is logged. Old cached recipes with flat `ingredients[]` still render correctly via a backward-compatible fallback in the modal.
 
 ### Generate shopping list — `generateShoppingList(force?)`
 `POST /v1/messages` — returns `{ categories: [{name, emoji, items: [{name, amount, items?: [{name, amount}]}], price: {low, high}}], totalPrice: {low, high} }`. Each category includes a `price` range estimate shown in the UI. Only regenerates when `planKey` changes or `force=true`. `planKey` is a hash of planned meal names + portions. Prompt includes the active unit system. Regenerating also clears `checkedItems` for that week.
@@ -186,7 +189,7 @@ Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Dr
 
 **Payload** — includes everything except API keys and OAuth tokens: `plan`, `weeks`, `portions`, `suggestions`, `proteinTargets`, `cuisineTargets`, `enabledCuisines`, `suggestionCount`, `maxTime`, `exclusions`, `units`, `shoppingLists`, `lastShoppingKeys`, `recipeCache`, `favourites`, `mealNotes`, `mealHistory`, `freezerItems`, `dislikedMeals`. Recipe cache is included so other devices don't need to re-fetch recipes.
 
-**Auto-save** — triggered by a `useEffect` watching key state slices. Debounced 2 s to avoid saving mid-interaction. **Guard:** skips the save entirely if the plan contains no meals — prevents an accidental "Tøm plan" from overwriting the Drive backup with empty state.
+**Auto-save** — triggered by a `useEffect` watching key state slices: `plan, suggestions, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache`. Debounced 2 s to avoid saving mid-interaction. **Guard:** skips the save entirely if the plan contains no meals — prevents an accidental "Tøm plan" from overwriting the Drive backup with empty state. `suggestions` is included so manually added meals survive a page refresh when Drive sync is active.
 
 **Load** — called once on startup if already connected, and after OAuth redirect completes. Manual pull button available in settings.
 
