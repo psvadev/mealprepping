@@ -1690,14 +1690,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
                         <ProteinBadge protein={meal.protein} />
                         <CategoryBadge category={meal.category} />
-                        {meal.batchScore && (
-                          <span title={`Manuelt lagt til — batchvennlighet: ${meal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
-                            color: meal.batchScore >= 4 ? '#7acf8a' : meal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
-                            fontFamily:"sans-serif", flexShrink:0 }}>
-                            {'✏ '}{'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
-                          </span>
-                        )}
                       </div>
+                      {meal.batchScore && (
+                        <div style={{ marginTop:6, fontSize:10, letterSpacing:1,
+                          color: meal.batchScore >= 4 ? '#7acf8a' : meal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
+                          fontFamily:"sans-serif" }}>
+                          {'✏ '}{'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
+                        </div>
+                      )}
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
                         fontFamily:"sans-serif", textAlign:"center", fontWeight:600 }}>Klikk for å velge →</div>}
                     </div>
@@ -2439,13 +2439,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>⏱ {suggestionModal.prepTime}</span>
                   <ProteinBadge protein={suggestionModal.protein} />
                   <CategoryBadge category={suggestionModal.category} />
-                  {suggestionModal.batchScore && (
-                    <span title={`Manuelt lagt til — batchvennlighet: ${suggestionModal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
-                      color: suggestionModal.batchScore >= 4 ? '#7acf8a' : suggestionModal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
-                      fontFamily:"sans-serif", flexShrink:0 }}>
-                      {'✏ '}{'❄'.repeat(suggestionModal.batchScore)}{'·'.repeat(5 - suggestionModal.batchScore)}
-                    </span>
-                  )}
                 </div>
               </div>
               <div style={{ display:"flex", gap:8, flexShrink:0 }}>
@@ -2463,6 +2456,25 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             <p style={{ margin:"0 0 16px", fontSize:12, color:"#b4b2c2", lineHeight:1.6, fontFamily:"sans-serif" }}>
               {suggestionModal.description}
             </p>
+            {suggestionModal.batchScore && (() => {
+              const s = suggestionModal.batchScore;
+              const label = s >= 5 ? "Perfekt for batch" : s === 4 ? "Godt egnet for batch" : s === 3 ? "Passer for batch" : s === 2 ? "Lite egnet for batch" : "Ikke egnet for batch";
+              const color = s >= 4 ? '#7acf8a' : s <= 2 ? '#e87070' : '#b4b2c2';
+              return (
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16,
+                  padding:"8px 12px", background:"#141517", borderRadius:8,
+                  border:`1px solid ${s >= 4 ? '#2a3d2e' : s <= 2 ? '#3d2a2a' : '#2a2b30'}` }}>
+                  <span style={{ fontSize:13 }}>✏</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", marginBottom:2 }}>Manuelt lagt til</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, letterSpacing:2, color }}> {'❄'.repeat(s)}{'·'.repeat(5-s)}</span>
+                      <span style={{ fontSize:11, color, fontFamily:"sans-serif" }}>{label}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             {(() => {
               const recipe = recipeCache[suggestionModal.name];
               const isLoadingRecipe = recipeLoading===suggestionModal.name;
