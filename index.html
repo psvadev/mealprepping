@@ -1691,10 +1691,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         <ProteinBadge protein={meal.protein} />
                         <CategoryBadge category={meal.category} />
                         {meal.batchScore && (
-                          <span title={`Batchvennlighet: ${meal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
+                          <span title={`Manuelt lagt til — batchvennlighet: ${meal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
                             color: meal.batchScore >= 4 ? '#7acf8a' : meal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
                             fontFamily:"sans-serif", flexShrink:0 }}>
-                            {'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
+                            {'✏ '}{'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
                           </span>
                         )}
                       </div>
@@ -2439,6 +2439,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     borderRadius:10, color:"#aaa8b8", fontFamily:"sans-serif" }}>⏱ {suggestionModal.prepTime}</span>
                   <ProteinBadge protein={suggestionModal.protein} />
                   <CategoryBadge category={suggestionModal.category} />
+                  {suggestionModal.batchScore && (
+                    <span title={`Manuelt lagt til — batchvennlighet: ${suggestionModal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
+                      color: suggestionModal.batchScore >= 4 ? '#7acf8a' : suggestionModal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
+                      fontFamily:"sans-serif", flexShrink:0 }}>
+                      {'✏ '}{'❄'.repeat(suggestionModal.batchScore)}{'·'.repeat(5 - suggestionModal.batchScore)}
+                    </span>
+                  )}
                 </div>
               </div>
               <div style={{ display:"flex", gap:8, flexShrink:0 }}>
