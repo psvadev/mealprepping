@@ -2461,16 +2461,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               const label = s >= 5 ? "Perfekt for batch" : s === 4 ? "Godt egnet for batch" : s === 3 ? "Passer for batch" : s === 2 ? "Lite egnet for batch" : "Ikke egnet for batch";
               const color = s >= 4 ? '#7acf8a' : s <= 2 ? '#e87070' : '#b4b2c2';
               return (
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16,
-                  padding:"8px 12px", background:"#141517", borderRadius:8,
+                <div style={{ marginBottom:16, padding:"10px 14px", background:"#141517", borderRadius:8,
                   border:`1px solid ${s >= 4 ? '#2a3d2e' : s <= 2 ? '#3d2a2a' : '#2a2b30'}` }}>
-                  <span style={{ fontSize:13 }}>✏</span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", marginBottom:2 }}>Manuelt lagt til</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <span style={{ fontSize:12, letterSpacing:2, color }}> {'❄'.repeat(s)}{'·'.repeat(5-s)}</span>
-                      <span style={{ fontSize:11, color, fontFamily:"sans-serif" }}>{label}</span>
-                    </div>
+                  <div style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", marginBottom:8 }}>
+                    ✏ Manuelt lagt til
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontSize:14, letterSpacing:3, color }}>{'❄'.repeat(s)}{'·'.repeat(5-s)}</span>
+                    <span style={{ fontSize:12, color, fontFamily:"sans-serif", fontWeight:600 }}>{label}</span>
                   </div>
                 </div>
               );
