@@ -42,6 +42,8 @@ const PROTEINS = [
   { key:"vegeta",  label:"Vegetar",        emoji:"🥕", color:"#7abf7a", bg:"#141c14" },
 ];
 
+const FREEZER_LIFE_DEFAULTS = { fisk: 60, kylling: 90, kjott: 90, vegeta: 90 };
+
 const MEAL_CATEGORIES = [
   { key:"suppe",    label:"Suppe",      emoji:"🍲" },
   { key:"ovn",      label:"Ovnsrett",   emoji:"🫕" },
@@ -489,9 +491,11 @@ function App() {
             ? { ...i, total: i.total + portions, remaining: i.remaining + portions }
             : i);
         } else {
+          const recipe = recipeCache[m.name];
           updated.push({ id: `${Date.now()}-${m.name}`, name: m.name,
             emoji: m.emoji || '🍽', protein: m.protein,
-            remaining: portions, total: portions, portionCount: portions, cookedAt: today });
+            remaining: portions, total: portions, portionCount: portions, cookedAt: today,
+            freezerLifeDays: recipe?.freezerLifeDays || null });
         }
       });
       return updated;
@@ -581,7 +585,7 @@ function App() {
             content:`Svar alltid på norsk bokmål.\n\nGi oppskrift for ${portions} porsjoner og næringsinnhold per porsjon for: ${meal.name}\n\nSkaler ingredienser til ${portions} porsjoner. Næringsinnhold skal være per porsjon (1 av ${portions}).\n\n${units === 'imperial'
               ? "Bruk imperiale mål (oz, lbs, cups, fl oz, tbsp, tsp)."
               : "Bruk norske måleenheter og forkortelser: g, kg, dl, ml, l, ss (spiseskje), ts (teskje), stk, fedd, klype, neve."
-            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan akkurat denne retten best pakkes og fryses, og hvordan den varmes opp best. Vær eksplisitt på oppvarmingsmetode: retter med sprø overflate (ovnsretter, gratenger, panerte retter) bør ovn anbefales — ikke mikrobølgeovn. Supper, gryter og sauser varmes fint i mikro eller kjele. Vær spesifikk for retten — unngå generiske råd som "frys i porsjonsbokser". Unngå tips om ferske sider eller noe som lages ved servering – alt skjer på batch-dagen. Estimer også total porsjonsvekt i gram (inkl. saus/kraft) og legg i "portionWeightGrams". Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg).\nInkluder også "activeMins" (heltall, minutter med aktiv tilberedning — f.eks. kutte, steke, røre) og "passiveMins" (heltall, minutter der retten passer seg selv — f.eks. i ovn eller koker). Sum av disse skal tilsvare total tilberedningstid.\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "portionWeightGrams": 420,\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Frys i flate bokser — da tiner det jevnt.", "Varm i ovn på 180°C i 15 min for sprø topp — mikro gjør bunnen seig."],\n  "activeMins": 25,\n  "passiveMins": 35\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
+            }\nInkluder prisestimat basert på norske butikkpriser (Rema, Kiwi, Meny).\n\nDette er en "reheat and eat" meal prep-app. Familien lager ALT på én batch-dag, fryser ned i porsjoner, og middagen er kun å varme opp og spise – ingen tilberedning ved servering. Inkluder 1–3 praktiske tips under "tips" om: hvordan akkurat denne retten best pakkes og fryses, og hvordan den varmes opp best. Vær eksplisitt på oppvarmingsmetode: retter med sprø overflate (ovnsretter, gratenger, panerte retter) bør ovn anbefales — ikke mikrobølgeovn. Supper, gryter og sauser varmes fint i mikro eller kjele. Vær spesifikk for retten — unngå generiske råd som "frys i porsjonsbokser". Unngå tips om ferske sider eller noe som lages ved servering – alt skjer på batch-dagen. Estimer også total porsjonsvekt i gram (inkl. saus/kraft) og legg i "portionWeightGrams". Bruk alltid punktum som desimalskilletegn i tall (f.eks. 1.2 kg, ikke 1,2 kg).\nInkluder også "activeMins" (heltall, minutter med aktiv tilberedning — f.eks. kutte, steke, røre) og "passiveMins" (heltall, minutter der retten passer seg selv — f.eks. i ovn eller koker). Sum av disse skal tilsvare total tilberedningstid. Inkluder "freezerLifeDays" (heltall, anbefalt maksimal fryselevetid i dager for denne retten basert på ingredienser og tilberedning — f.eks. 60 for fiskeretter, 90 for kjøttgryter, 120 for kyllingretter).\nSvar med dette JSON-formatet:\n{\n  "components": [\n    { "name": "Kjøttboller", "ingredients": ["500g kjøttdeig", "1 egg", "salt og pepper"] },\n    { "name": "Tomatsaus", "ingredients": ["2 bokser hermetiske tomater", "1 løk", "2 fedd hvitløk"] }\n  ],\n  "steps": ["Forvarm ovnen til 200°C.", "Krydre kyllingen og brun i panne."],\n  "nutrition": { "calories": 420, "protein": 38, "fat": 14, "carbs": 28, "fiber": 5 },\n  "portionWeightGrams": 420,\n  "pricePerPortion": { "low": 45, "high": 65 },\n  "tips": ["Frys i flate bokser — da tiner det jevnt.", "Varm i ovn på 180°C i 15 min for sprø topp — mikro gjør bunnen seig."],\n  "activeMins": 25,\n  "passiveMins": 35,\n  "freezerLifeDays": 90\n}\nHvis retten er enkel og ikke har naturlige delkomponenter, bruk én komponent med rettens navn. Del alltid opp i komponenter der det gir mening (f.eks. saus, bunn, fyll, marinade, tilbehør).`
           }]
         })
       });
@@ -622,7 +626,7 @@ function App() {
         headers: { 'Content-Type':'application/json', 'x-api-key':anthropicKey,
           'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
         body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:256, messages:[{ role:'user', content:
-          `Svar alltid på norsk bokmål.\nGi meg informasjon om denne retten for en batch-cook meal prep-app: "${name}"\nRetten skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt – lag-fra-bunnen gjelder selve retten, ikke hver enkelt ingrediens.\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"name":"Norsk navn","emoji":"🍽","protein":"kylling|fisk|kjott|vegeta","category":"suppe|ovn|gryte|pasta|kjapp|salat|wrap|klassisk","prepTime":"XX min","description":"Kort beskrivelse på 1 setning"}`
+          `Svar alltid på norsk bokmål.\nGi meg informasjon om denne retten for en batch-cook meal prep-app: "${name}"\nRetten skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt – lag-fra-bunnen gjelder selve retten, ikke hver enkelt ingrediens.\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"name":"Norsk navn","emoji":"🍽","protein":"kylling|fisk|kjott|vegeta","category":"suppe|ovn|gryte|pasta|kjapp|salat|wrap|klassisk","prepTime":"XX min","description":"Kort beskrivelse på 1 setning","batchScore":3}\nbatchScore er 1–5: hvor godt retten egner seg til frysing og oppvarming (1=dårlig, f.eks. sushi; 5=perfekt, f.eks. gryter og supper).`
         }] })
       });
       const data = await res.json();
@@ -1683,9 +1687,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <p style={{ margin:"0 0 8px", fontSize:11, color:"#b4b2c2", lineHeight:1.5, fontFamily:"sans-serif", flex:1 }}>
                         {meal.description}
                       </p>
-                      <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
                         <ProteinBadge protein={meal.protein} />
                         <CategoryBadge category={meal.category} />
+                        {meal.batchScore && (
+                          <span title={`Batchvennlighet: ${meal.batchScore}/5`} style={{ fontSize:10, letterSpacing:1,
+                            color: meal.batchScore >= 4 ? '#7acf8a' : meal.batchScore <= 2 ? '#e87070' : '#b4b2c2',
+                            fontFamily:"sans-serif", flexShrink:0 }}>
+                            {'❄'.repeat(meal.batchScore)}{'·'.repeat(5 - meal.batchScore)}
+                          </span>
+                        )}
                       </div>
                       {activeCell && <div style={{ marginTop:8, fontSize:10, color:"#e8a838",
                         fontFamily:"sans-serif", textAlign:"center", fontWeight:600 }}>Klikk for å velge →</div>}
@@ -2263,8 +2274,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   }, {})
                 ).sort(([a],[b]) => b.localeCompare(a)).map(([date, items]) => {
                     const ageDays  = Math.floor((Date.now() - new Date(date+'T12:00:00').getTime()) / 86400000);
-                    const isOld    = ageDays >= 90;
-                    const isAgeing = ageDays >= 60 && ageDays < 90;
+                    const batchShelfLife = items.reduce((min, item) => {
+                      const life = item.freezerLifeDays || FREEZER_LIFE_DEFAULTS[item.protein] || 90;
+                      return Math.min(min, life);
+                    }, Infinity);
+                    const isOld    = ageDays >= batchShelfLife;
+                    const isAgeing = ageDays >= batchShelfLife - 14 && ageDays < batchShelfLife;
                     return (
                   <div key={date}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
@@ -2278,7 +2293,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           fontFamily:"sans-serif", fontWeight:600 }}>⚠ {ageDays} {ageDays === 1 ? "dag" : "dager"} gammel</span>}
                         {isAgeing && <span style={{ fontSize:9, color:"#c8b84a", background:"#2a2610",
                           border:"1px solid #4a4420", borderRadius:6, padding:"1px 8px",
-                          fontFamily:"sans-serif", fontWeight:600 }}>⏰ {ageDays} {ageDays === 1 ? "dag" : "dager"} · bruk snart</span>}
+                          fontFamily:"sans-serif", fontWeight:600 }}>⏰ {batchShelfLife - ageDays} {(batchShelfLife - ageDays) === 1 ? "dag" : "dager"} igjen</span>}
                       </div>
                       <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date))}
                         style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #e87060",
