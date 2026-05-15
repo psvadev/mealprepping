@@ -21,7 +21,7 @@ Browser-based weekly meal planner for a Norwegian family doing batch-cook meal p
 - **No build step** — React 18 and Babel Standalone loaded from `unpkg.com` CDN. JSX transpiled in-browser via `<script type="text/babel">`.
 - **All state in localStorage** — prefixed `mp_`. Initialized via lazy `useState(() => lsGet(...))`, persisted with individual `useEffect` hooks per state slice.
 - **Anthropic API** — called directly from the browser using `fetch`. Requires `anthropic-dangerous-direct-browser-access: true` header to bypass CORS. Model: `claude-sonnet-4-6`.
-- **Kassal API** — `kassal.app/api/v1/products` for real Norwegian grocery prices. Optional — falls back to AI price estimates if key is absent.
+- **Kassalapp API** — `kassal.app/api/v1/products` for real Norwegian grocery prices. Optional — falls back to AI price estimates if key is absent.
 - **No backend** — everything runs client-side.
 
 ---
@@ -33,7 +33,7 @@ All keys use the `mp_` prefix.
 | Key | Type | Description |
 |-----|------|-------------|
 | `mp_anthropicKey` | string | Anthropic API key — required for all AI features |
-| `mp_kassalKey` | string | Kassal API key — optional, enables real grocery prices |
+| `mp_kassalKey` | string | Kassalapp API key — optional, enables real grocery prices |
 | `mp_plan` | array[4][7] | Weekly grid — 4 weeks × 7 days, each cell is a meal object or null |
 | `mp_suggestions` | array | Current AI-generated meal suggestions |
 | `mp_favourites` | array | Starred meals, persists across sessions |
@@ -168,7 +168,7 @@ Freezer inventory for tracking batch-cooked portions.
 
 Picks up to 4 meaningful ingredients (skips salt, water, oil, etc.), strips amounts and adjectives, extracts the main noun word, searches `kassal.app/api/v1/products?search={word}&size=5`. Takes the minimum price found per ingredient, sums them, divides by `portions`. Returns `{low, high, source:"kassal"}` if ≥1 ingredient matched, otherwise `null`. Attached to `recipe.pricePerPortion` after recipe fetch, overriding the AI estimate.
 
-**Hobby plan limits** — the free Kassal API tier allows 60 req/min, no commercial use, no support. Each recipe fetch makes up to 4 Kassal requests (one per meaningful ingredient). In normal use this is not a concern — a user would need to expand ~15 recipe cards within a single minute to approach the limit, which is unlikely. No rate-limit handling is implemented; if the limit is hit, `fetchKassalPrice` will return `null` and the app falls back to the AI price estimate silently. If usage grows, the only mitigation needed would be reducing the ingredient cap below 4 or adding a short delay between searches.
+**Hobby plan limits** — the free Kassalapp API tier allows 60 req/min, no commercial use, no support. Each recipe fetch makes up to 4 Kassal requests (one per meaningful ingredient). In normal use this is not a concern — a user would need to expand ~15 recipe cards within a single minute to approach the limit, which is unlikely. No rate-limit handling is implemented; if the limit is hit, `fetchKassalPrice` will return `null` and the app falls back to the AI price estimate silently. If usage grows, the only mitigation needed would be reducing the ingredient cap below 4 or adding a short delay between searches.
 
 ---
 
