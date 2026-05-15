@@ -13,6 +13,15 @@ Would require: backend (auth, user data storage), billing, API key management on
 
 ---
 
+## Deferred / SaaS-tier
+
+### Structured allergen management
+The current exclusions field is free text, which works fine for a personal family app where the AI understands context. A proper allergen system — predefined chips for the 14 EU allergens (gluten, laktose, nøtter, egg, skalldyr, etc.) plus a free-text overflow field, and per-person profiles — would be the right approach if the app ever becomes multi-user. For a single family, the free-text field is sufficient; the main risk is typos or ambiguous entries.
+
+**If added:** exclusions are already injected into all "selection" AI prompts (`generateSuggestions`, `addManualMeal`) with strong wording that also covers dish names and inspiration sources. The structured allergen list would just replace the string input that feeds those same variables — no prompt architecture change needed.
+
+---
+
 ## Deferred / not planned
 
 - **Per-day prep tracking** — conflicts with the batch-cook philosophy. Everything is cooked on one day; tracking per-day prep adds complexity for no gain.
