@@ -226,6 +226,7 @@ function App() {
   const [suggestions, setSuggestions] = useState(() => lsGet('suggestions', []));
   const [manualInput,   setManualInput]   = useState('');
   const [manualLoading, setManualLoading] = useState(false);
+  const [manualError,   setManualError]   = useState(null);
   const [favourites,  setFavourites]  = useState(() => lsGet('favourites', []));
   const [freezerItems,setFreezerItems]= useState(() => lsGet('freezerItems', []));
   const [dislikedMeals,setDislikedMeals]=useState(() => lsGet('dislikedMeals', []));
@@ -619,7 +620,13 @@ function App() {
   const addManualMeal = useCallback(async () => {
     const name = manualInput.trim();
     if (!name || !anthropicKey) return;
+    if (suggestions.some(m => m.name.toLowerCase() === name.toLowerCase())) {
+      setManualError('Denne retten er allerede i forslagslisten.');
+      return;
+    }
     setManualLoading(true);
+    setManualError(null);
+    let enrichFailed = false;
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -632,11 +639,16 @@ function App() {
       const data = await res.json();
       const text = data.content?.[0]?.text || '';
       const match = text.match(/\{[\s\S]*\}/);
-      const meal = match ? JSON.parse(match[0]) : { name, emoji:'🍽', protein:'kjott', category:'klassisk', prepTime:'30 min', description:'' };
+      let meal;
+      try { meal = match ? JSON.parse(match[0]) : null; } catch { meal = null; }
+      if (!meal) { enrichFailed = true; meal = { name, emoji:'🍽', protein:'kjott', category:'klassisk', prepTime:'30 min', description:'' }; }
       setSuggestions(prev => [meal, ...prev.filter(m => m.name !== meal.name)]);
       setManualInput('');
-    } catch { /* silently ignore — no crash */ } finally { setManualLoading(false); }
-  }, [manualInput, anthropicKey]);
+      if (enrichFailed) setManualError('Kunne ikke berike retten – lagt til med standardverdier.');
+    } catch {
+      setManualError('Noe gikk galt. Sjekk API-nøkkelen og prøv igjen.');
+    } finally { setManualLoading(false); }
+  }, [manualInput, anthropicKey, suggestions]);
 
   // ── Generate suggestions ──────────────────────────────────────────────────
   const generateSuggestions = useCallback(async () => {
@@ -1633,7 +1645,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 }}>✕ Tøm</button>
               </div>
               <div style={{ display:"flex", gap:6 }}>
-                <input type="text" value={manualInput} onChange={e=>setManualInput(e.target.value)}
+                <input type="text" value={manualInput} onChange={e=>{setManualInput(e.target.value);setManualError(null);}}
                   onKeyDown={e=>e.key==='Enter'&&!manualLoading&&addManualMeal()}
                   placeholder="Legg til en rett manuelt…"
                   style={{ flex:1, background:"#141517", border:"1px solid #2a2b30", borderRadius:7,
@@ -1644,9 +1656,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     color:manualInput.trim()&&!manualLoading?"#0e0f11":"#747280",
                     cursor:manualInput.trim()&&!manualLoading?"pointer":"not-allowed",
                     fontSize:12, fontWeight:600, fontFamily:"sans-serif", whiteSpace:"nowrap" }}>
-                  {manualLoading ? "…" : "Legg til"}
+                  {manualLoading ? "Legger til…" : "Legg til"}
                 </button>
               </div>
+              {manualError && <div style={{ marginTop:6, fontSize:11, color:"#e8a838", fontFamily:"sans-serif" }}>{manualError}</div>}
             </div>
 
             {loading && (
@@ -1680,6 +1693,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           background:"transparent", border:"none", cursor:"pointer", fontSize:15,
                           color:isFavourite(meal)?"#e8a838":"#44424e", padding:"0 2px"
                         }} title={isFavourite(meal)?"Fjern fra favoritter":"Legg til favoritter"}>★</button>
+                        {meal.batchScore && <button onClick={e=>{e.stopPropagation();setSuggestions(s=>s.filter(m=>m.name!==meal.name));}} style={{
+                          background:"transparent", border:"none", cursor:"pointer", fontSize:13,
+                          color:"#44424e", padding:"0 2px", lineHeight:1
+                        }} title="Fjern forslag">✕</button>}
                       </div>
                       <div style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:5, paddingRight:52 }}>
                         <span style={{ fontSize:20, flexShrink:0 }}>{meal.emoji}</span>
