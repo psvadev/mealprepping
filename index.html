@@ -371,6 +371,7 @@ function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
+      if (manualOptions) { setManualOptions(null); return; }
       if (suggestionModal) { setSuggestionModal(null); return; }
       if (confirmClear) { setConfirmClear(false); return; }
       if (confirmClearCache) { setConfirmClearCache(false); return; }
@@ -381,7 +382,7 @@ function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [planModal, suggestionModal, confirmClear, confirmClearCache, notesDraft]);
+  }, [planModal, suggestionModal, manualOptions, confirmClear, confirmClearCache, notesDraft]);
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
