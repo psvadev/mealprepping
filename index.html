@@ -2451,7 +2451,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           <div onClick={e=>e.stopPropagation()}
             style={{ background:"#18191c", borderRadius:14, padding:24, maxWidth:480, width:"100%",
               border:"1px solid #2a2b30", position:"relative" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:"#e4ddd0", fontFamily:"sans-serif", marginBottom:16 }}>Velg en rett</div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#e4ddd0", fontFamily:"sans-serif" }}>Velg en rett</div>
+              <div style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", marginTop:4 }}>Klikk på en rett for å legge den til i forslagslisten.</div>
+            </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {manualOptions.map((meal,i) => (
                 <button key={i} onClick={()=>{
