@@ -1022,7 +1022,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         recipeCache, favourites, mealNotes, mealHistory, freezerItems, dislikedMeals });
     }, 2000);
     return () => clearTimeout(driveSyncTimer.current);
-  }, [plan, suggestions, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache, driveConnected]);
+  }, [plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions, cuisineTargets, enabledCuisines, suggestionCount, units, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache, driveConnected]);
 
   const printPlan = () => {
     const rows = Array.from({length:weeks},(_,w) => {
