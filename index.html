@@ -630,13 +630,14 @@ function App() {
     setManualError(null);
     setManualOptions(null);
     const mealSchema = `{"name":"Norsk navn","emoji":"🍽","protein":"kylling|fisk|kjott|vegeta","category":"suppe|ovn|gryte|pasta|kjapp|salat|wrap|klassisk","prepTime":"XX min","description":"Kort beskrivelse på 1 setning","batchScore":3}`;
+    const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}. Dette gjelder også rettnavn og inspirasjonskilder.` : '';
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'x-api-key':anthropicKey,
           'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
         body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:600, messages:[{ role:'user', content:
-          `Svar alltid på norsk bokmål.\nBrukeren ønsker å legge til "${name}" i en batch-cook meal prep-app. Gi 3 ulike varianter av denne retten. Rettene skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt.\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"meals":[${mealSchema},${mealSchema},${mealSchema}]}\nbatchScore er 1–5: hvor godt retten egner seg til frysing og oppvarming (1=dårlig, f.eks. sushi; 5=perfekt, f.eks. gryter og supper).`
+          `Svar alltid på norsk bokmål.\nBrukeren ønsker å legge til "${name}" i en batch-cook meal prep-app. Gi 3 ulike varianter av denne retten. Rettene skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt.${exclusionLine}\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"meals":[${mealSchema},${mealSchema},${mealSchema}]}\nbatchScore er 1–5: hvor godt retten egner seg til frysing og oppvarming (1=dårlig, f.eks. sushi; 5=perfekt, f.eks. gryter og supper).`
         }] })
       });
       const data = await res.json();
@@ -652,7 +653,7 @@ function App() {
     } catch {
       setManualError('Noe gikk galt. Sjekk API-nøkkelen og prøv igjen.');
     } finally { setManualLoading(false); }
-  }, [manualInput, anthropicKey, suggestions]);
+  }, [manualInput, anthropicKey, suggestions, exclusions]);
 
   // ── Generate suggestions ──────────────────────────────────────────────────
   const generateSuggestions = useCallback(async () => {
