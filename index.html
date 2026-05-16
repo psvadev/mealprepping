@@ -228,7 +228,7 @@ function App() {
   const [manualLoading, setManualLoading] = useState(false);
   const [manualError,   setManualError]   = useState(null);
   const [manualOptions, setManualOptions] = useState(null);
-  const [collapsedCategories, setCollapsedCategories] = useState(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState({});
   const [favourites,  setFavourites]  = useState(() => lsGet('favourites', []));
   const [freezerItems,setFreezerItems]= useState(() => lsGet('freezerItems', []));
   const [dislikedMeals,setDislikedMeals]=useState(() => lsGet('dislikedMeals', []));
@@ -1860,11 +1860,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   )}
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:10 }}>
                     {visibleCategories.map((cat,i) => {
-                      const isCollapsed = collapsedCategories.has(cat.name);
+                      const isCollapsed = !!(collapsedCategories[shoppingWeek]?.has(cat.name));
                       const checkedCount = cat.items.filter(item => !!checkedItems[shoppingWeek]?.[`${cat.name}|${item.name}`]).length;
                       return (
                       <div key={i} style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10, padding:"12px 14px" }}>
-                        <div onClick={() => setCollapsedCategories(prev => { const n = new Set(prev); n.has(cat.name) ? n.delete(cat.name) : n.add(cat.name); return n; })}
+                        <div onClick={() => setCollapsedCategories(prev => { const s = new Set(prev[shoppingWeek]); s.has(cat.name) ? s.delete(cat.name) : s.add(cat.name); return {...prev, [shoppingWeek]: s}; })}
                           style={{ display:"flex", alignItems:"center", gap:7, marginBottom: isCollapsed ? 0 : 10,
                           paddingBottom: isCollapsed ? 0 : 8, borderBottom: isCollapsed ? "none" : "1px solid #22232a",
                           cursor:"pointer", userSelect:"none" }}>

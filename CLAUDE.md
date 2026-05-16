@@ -161,7 +161,7 @@ Freezer inventory for tracking batch-cooked portions.
 - **Freezer notice** — shown above the list when any planned meals are already in the freezer with `remaining > 0`. Single-sentence summary (e.g. "Kyllinggryte ligger allerede i fryseren og er ikke inkludert i listen."). When `allFrozen` (all planned meals covered by freezer), the "Har du dette hjemme?" pantry category and the total price estimate are hidden — the list is effectively empty and showing them would be misleading.
 - **Uncached meals notice** — amber banner shown when any planned meals lack cached recipe data, indicating that ingredient amounts are AI-estimated rather than derived from actual recipes. Banner disappears once all recipes are loaded and the list is regenerated.
 - **Dish context sub-items** — each ingredient row has indented sub-rows showing which dish uses it and how much. Sub-items are hidden when the parent item is checked off.
-- **Collapsible categories** — each category header is clickable to collapse/expand the item list. Collapsed headers show a `▸` chevron and a `checked/total` count badge so progress is visible without expanding. State is in `collapsedCategories` (`useState(new Set())`) — not persisted, resets on page refresh.
+- **Collapsible categories** — each category header is clickable to collapse/expand the item list. Collapsed headers show a `▸` chevron and a `checked/total` count badge so progress is visible without expanding. State is in `collapsedCategories` (`useState({})`) — keyed by week index (`{ [weekIndex]: Set<categoryName> }`) so collapsed state is independent per week. Not persisted, resets on page refresh.
 
 ---
 
