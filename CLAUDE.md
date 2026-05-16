@@ -144,7 +144,7 @@ Freezer inventory for tracking batch-cooked portions.
 
 **Recipe-aware ingredient input:** Before calling the API, each planned meal is checked against `mp_recipeCache`. If a cached recipe exists with ingredients, those ingredient strings (already scaled to `portions`) are passed directly into the prompt so the AI aggregates known data rather than estimating. Falls back to meal name only for uncached meals. This makes ingredient names and amounts consistent between regenerations for cached meals.
 
-**Dish context sub-items:** Each ingredient in the response includes an optional `items` array listing which dishes use it and how much. The prompt requests sub-items for all specific ingredients (single-use and multi-use alike); generic basics like løk, hvitløk, ingefær, etc. are exempt and only get a total row.
+**Dish context sub-items:** Each ingredient in the response includes an `items` array listing which dishes use it and how much. The prompt requires sub-items for all ingredients without exception — no hardcoded exemption list. Category-level collapse in the UI handles the length concern instead.
 
 **Freezer-aware:** Before building the prompt, planned meals are cross-referenced against `freezerItems` by name (case-insensitive). Matches with `remaining > 0` inject a note: if `remaining >= portions`, the AI is told to skip that meal's ingredients entirely; if partial, it scales to `portions - remaining` new portions only.
 
@@ -160,7 +160,8 @@ Freezer inventory for tracking batch-cooked portions.
 - **Persistence** — `mp_checkedItems` persists in localStorage so check-off state survives page refresh. Cleared automatically when the list is regenerated for that week.
 - **Freezer notice** — shown above the list when any planned meals are already in the freezer with `remaining > 0`. Single-sentence summary (e.g. "Kyllinggryte ligger allerede i fryseren og er ikke inkludert i listen."). When `allFrozen` (all planned meals covered by freezer), the "Har du dette hjemme?" pantry category and the total price estimate are hidden — the list is effectively empty and showing them would be misleading.
 - **Uncached meals notice** — amber banner shown when any planned meals lack cached recipe data, indicating that ingredient amounts are AI-estimated rather than derived from actual recipes. Banner disappears once all recipes are loaded and the list is regenerated.
-- **Dish context sub-items** — each ingredient row may include indented sub-rows showing which dish uses it and how much. Sub-items are hidden when the parent item is checked off.
+- **Dish context sub-items** — each ingredient row has indented sub-rows showing which dish uses it and how much. Sub-items are hidden when the parent item is checked off.
+- **Collapsible categories** — each category header is clickable to collapse/expand the item list. Collapsed headers show a `▸` chevron and a `checked/total` count badge so progress is visible without expanding. State is in `collapsedCategories` (`useState(new Set())`) — not persisted, resets on page refresh.
 
 ---
 
