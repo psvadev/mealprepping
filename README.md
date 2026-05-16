@@ -26,7 +26,7 @@ The philosophy: cook everything on one batch day, freeze in portions, and dinner
 - **Print / share** — opens a dark-themed printable page; switches to white for physical printing
 - **Freezer tracker** — log a planned week to a freezer inventory; track remaining portions with +/− controls; per-recipe age warnings based on the AI-determined shelf life for that dish (e.g. 60 days for fish, 90 for meat stews) — warns 14 days before the limit and again when expired, so a fish gratin flags well before a beef stew would
 - **Meal ratings** — 👍/👎 on freezer items once you've eaten a portion; thumbs up adds to favourites, thumbs down blocks the meal from future AI suggestions
-- **Shopping list check-off** — tap items while shopping to strike them through; progress persists across page refreshes and clears when the list is regenerated
+- **Shopping list check-off** — tap items while shopping to strike them through; sub-items (which dish uses each ingredient) collapse when the parent is checked; categories are collapsible to keep the list manageable; progress persists across page refreshes and clears when the list is regenerated
 - **Batch & freeze tips** — each recipe includes 1–3 AI-generated tips on how to pack, freeze, and reheat the dish
 - **Google Drive sync** — optional auto-sync to a single JSON file in your Google Drive; keeps plan, freezer, and recipe cache in sync across devices using OAuth PKCE with `drive.file` scope (no access to other Drive files)
 - **Export / import** — save and restore the full plan as JSON; export shopping list as `.txt`
