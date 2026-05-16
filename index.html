@@ -1858,7 +1858,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       </span>
                     </div>
                   )}
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:10, alignItems:"start" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:10 }}>
                     {visibleCategories.map((cat,i) => {
                       const isCollapsed = collapsedCategories.has(cat.name);
                       const checkedCount = cat.items.filter(item => !!checkedItems[shoppingWeek]?.[`${cat.name}|${item.name}`]).length;
