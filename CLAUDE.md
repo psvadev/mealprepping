@@ -200,8 +200,9 @@ Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Dr
 - PKCE verifier stored in `localStorage` (not `sessionStorage`) to survive cross-origin redirects on mobile.
 - `getValidAccessToken` refreshes the access token automatically using the stored refresh token.
 - If the refresh returns `invalid_grant` (e.g. user revoked access externally), the token is cleared and `driveStatus` is set to `'expired'`. Callers detect the `'TOKEN_EXPIRED'` sentinel and show an amber reconnect prompt in settings.
-- Disconnecting calls `https://oauth2.googleapis.com/revoke` to invalidate the token server-side before clearing localStorage.
+- Disconnecting calls `https://oauth2.googleapis.com/revoke` to invalidate the token server-side before clearing localStorage. Manual disconnect also clears `mp_driveFileId`.
 - `connectGoogleDrive` uses `useCallback` with `[googleClientId, googleClientSecret]` as deps — both must be in the array or the callback captures stale empty strings and silently does nothing.
+- **Disconnection badge** — `hadDriveConnection` state (`useState(() => !!lsGet('driveFileId', null))`) detects prior connections on startup. When `!driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection)`, an amber **Drive** pill appears on the desktop ⚙ Innstillinger button and an amber dot on the mobile nav settings tab. Manual disconnect clears `driveFileId`, so the badge disappears after refresh (intentional — user chose to disconnect). External revocation leaves `driveFileId` intact, so the badge persists across refreshes until reconnected.
 
 ---
 
@@ -224,7 +225,7 @@ Every meal assigned to the plan (via click, select mode, or drag) is added to `m
 Sections (in display order):
 
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs with "Fjern" clear buttons, stored immediately in localStorage on change. Never included in plan exports.
-2. **Google Drive Sync** — Client ID + Client Secret inputs (disabled when connected). "Koble til Google Drive" button; when connected shows sync status (syncing / synced / error / idle), "Last inn nå" pull button, and "Koble fra" disconnect button. Amber warning when token has expired (`driveStatus === 'expired'`), prompting reconnection.
+2. **Google Drive Sync** — Client ID + Client Secret inputs (disabled when connected). "Koble til Google Drive" button; when connected shows sync status (syncing / synced / error / idle), "Last inn nå" pull button, and "Koble fra" disconnect button. Amber warning when token has expired (`driveStatus === 'expired'`), prompting reconnection. An amber badge also appears on the settings nav entry point (desktop pill, mobile dot) when Drive is disconnected — visible from any view so the user notices before going to the store with a stale list.
 3. **Standardverdier** — weeks (1–4), portions (1–20 via Stepper), suggestion count (5–30 step 5), max prep time slider (15–120 min step 15), and measurement units (Metrisk / Imperialt toggle). Switching units clears `mp_recipeCache` and `mp_shoppingLists` immediately. Changing portions calls `changePortions(n)` which also clears those caches.
 4. **Allergener og ekskluderinger** — free-text input for ingredients/allergens the AI should always avoid. "× Fjern alle" clear button shown when non-empty. Value is `mp_exclusions`, injected into all three AI prompts.
 5. **Favoritter** — all starred meals shown as chips with per-item ✕ removal and a "Tøm alle" button. Empty state prompts to use ★ on a suggestion or in the plan.
