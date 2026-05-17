@@ -279,6 +279,7 @@ function App() {
   const [driveStatus,        setDriveStatus]        = useState('idle');
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
   const [driveConnected, setDriveConnected] = useState(() => !!lsGet('driveToken', null));
+  const [hadDriveConnection] = useState(() => !!lsGet('driveFileId', null));
 
   useEffect(() => {
     const handler = () => setIsMobile(Math.min(window.innerWidth, window.innerHeight) < 640);
@@ -1202,7 +1203,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <button onClick={()=>setView("fryser")} style={btnTab(view==="fryser")}>
                 ❄️ Fryser{activeFreezerItems.length>0 ? ` (${activeFreezerItems.length})` : ""}
               </button>
-              <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger</button>
+              <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger{!driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection) && <span style={{ marginLeft:6, fontSize:9, background:"#e8a838", color:"#0e0f11", borderRadius:99, padding:"1px 5px", fontFamily:"sans-serif", verticalAlign:"middle" }}>Drive</span>}</button>
               <div style={{ width:1, background:"#2a2b30", margin:"4px 2px", alignSelf:"stretch" }} />
               <button onClick={printPlan} title="Skriv ut / del plan" style={{
                 padding:"6px 12px", borderRadius:6, border:"1px solid #4a3a1a",
@@ -2838,7 +2839,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               borderTop: view===tab.key ? "2px solid #e8a838" : "2px solid transparent",
               fontSize:10, fontFamily:"sans-serif"
             }}>
-              <span style={{ fontSize:18 }}>{tab.emoji}</span>
+              <span style={{ fontSize:18, position:"relative", display:"inline-block" }}>
+                {tab.emoji}
+                {tab.key==='settings' && !driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection) && (
+                  <span style={{ position:"absolute", top:-1, right:-3, width:7, height:7, borderRadius:99, background:"#e8a838", border:"1px solid #0e0f11" }} />
+                )}
+              </span>
               {tab.label}
             </button>
           ))}
