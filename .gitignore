@@ -7,6 +7,4 @@ Thumbs.db
 .idea/
 
 # Local only
-HANDOFF.md
-SAAS_NOTES.md
-INFRA_NOTES.md
+docs/
