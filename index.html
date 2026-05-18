@@ -394,6 +394,7 @@ function App() {
   const totalSlots = weeks * 7;
 
   const activeFreezerItems = useMemo(() => freezerItems.filter(i => i.remaining > 0), [freezerItems]);
+  const showDriveBadge = !driveConnected && googleClientId && (driveStatus === 'expired' || hadDriveConnection);
   const freezerRemainingTotal = useMemo(() => activeFreezerItems.reduce((s, i) => s + i.remaining, 0), [activeFreezerItems]);
   const hasDepleted = useMemo(() => freezerItems.some(i => i.remaining === 0), [freezerItems]);
 
@@ -830,6 +831,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     setShoppingLoading(false);
   };
 
+  function toggleCollapsedCategory(week, catName) {
+    setCollapsedCategories(prev => {
+      const s = new Set(prev[week]);
+      s.has(catName) ? s.delete(catName) : s.add(catName);
+      return {...prev, [week]: s};
+    });
+  }
+
   function toggleCheckedItem(week, catName, itemName) {
     const key = `${catName}|${itemName}`;
     setCheckedItems(prev => {
@@ -1203,7 +1212,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <button onClick={()=>setView("fryser")} style={btnTab(view==="fryser")}>
                 ❄️ Fryser{activeFreezerItems.length>0 ? ` (${activeFreezerItems.length})` : ""}
               </button>
-              <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger{!driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection) && <span style={{ marginLeft:6, fontSize:9, background:"#e8a838", color:"#0e0f11", borderRadius:99, padding:"1px 5px", fontFamily:"sans-serif", verticalAlign:"middle" }}>Drive</span>}</button>
+              <button onClick={()=>setView("settings")} style={btnTab(view==="settings")}>⚙ Innstillinger{showDriveBadge && <span style={{ marginLeft:6, fontSize:9, background:"#e8a838", color:"#0e0f11", borderRadius:99, padding:"1px 5px", fontFamily:"sans-serif", verticalAlign:"middle" }}>Drive</span>}</button>
               <div style={{ width:1, background:"#2a2b30", margin:"4px 2px", alignSelf:"stretch" }} />
               <button onClick={printPlan} title="Skriv ut / del plan" style={{
                 padding:"6px 12px", borderRadius:6, border:"1px solid #4a3a1a",
@@ -1865,7 +1874,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       const checkedCount = cat.items.filter(item => !!checkedItems[shoppingWeek]?.[`${cat.name}|${item.name}`]).length;
                       return (
                       <div key={i} style={{ background:"#18191c", border:"1px solid #22232a", borderRadius:10, padding:"12px 14px" }}>
-                        <div onClick={() => setCollapsedCategories(prev => { const s = new Set(prev[shoppingWeek]); s.has(cat.name) ? s.delete(cat.name) : s.add(cat.name); return {...prev, [shoppingWeek]: s}; })}
+                        <div onClick={() => toggleCollapsedCategory(shoppingWeek, cat.name)}
                           style={{ display:"flex", alignItems:"center", gap:7, marginBottom: isCollapsed ? 0 : 10,
                           paddingBottom: isCollapsed ? 0 : 8, borderBottom: isCollapsed ? "none" : "1px solid #22232a",
                           cursor:"pointer", userSelect:"none" }}>
@@ -2841,7 +2850,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             }}>
               <span style={{ fontSize:18, position:"relative", display:"inline-block" }}>
                 {tab.emoji}
-                {tab.key==='settings' && !driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection) && (
+                {tab.key==='settings' && showDriveBadge && (
                   <span style={{ position:"absolute", top:-1, right:-3, width:7, height:7, borderRadius:99, background:"#e8a838", border:"1px solid #0e0f11" }} />
                 )}
               </span>
