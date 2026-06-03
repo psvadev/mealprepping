@@ -245,7 +245,8 @@ function App() {
   const [units,           setUnits]           = useState(() => lsGet('units', 'metric'));
 
   // UI state
-  const [view,          setView]          = useState('plan');
+  const VIEWS = ['plan','shopping','fryser','settings'];
+  const [view,          setView]          = useState(() => { const h = window.location.hash.slice(1); return VIEWS.includes(h) ? h : 'plan'; });
   const [loading,       setLoading]       = useState(false);
   const [shoppingLists, setShoppingLists] = useState(() => lsGet('shoppingLists', {}));
   const [shoppingWeek,  setShoppingWeek]  = useState(0);
@@ -368,6 +369,16 @@ function App() {
   useEffect(() => {
     if (planModal) setNotesDraft(mealNotes[planModal.meal.name] || '');
   }, [planModal?.meal?.name]);
+
+  // Sync view <-> URL hash for deep linking and back/forward support
+  useEffect(() => {
+    if (window.location.hash.slice(1) !== view) window.location.hash = view;
+  }, [view]);
+  useEffect(() => {
+    const onHash = () => { const h = window.location.hash.slice(1); if (VIEWS.includes(h)) setView(h); };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   // Close modal on Escape
   useEffect(() => {
