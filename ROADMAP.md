@@ -11,16 +11,7 @@ The app's core constraint: **single `index.html`, no build step, no backend**. I
 Features that could fit the single-file constraint but haven't been prioritised.
 
 ### FreezerBox integration
-**FreezerBox** is a companion app (`psvadev.github.io/FreezerBox/`) for tracking physical freezer containers with permanent QR labels. Same stack — single `index.html`, React 18 + Babel CDN, `fb_` localStorage prefix, Google Drive sync.
-
-Because both apps run on the same `psvadev.github.io` origin they share `localStorage`. Reheat & Eat can read `fb_containers` directly — no sync mechanism needed.
-
-**Potential integration points:**
-- Show available container count when logging a week to the freezer ("3 small, 1 big available")
-- Let the user pick a specific container from the available list when assigning a freezer entry
-- Deeplink to FreezerBox scanner: `../FreezerBox/#scanner`
-
-No implementation priority set — depends on real-world usage revealing whether the friction is worth solving.
+A local companion app for tracking physical freezer containers with QR labels. Potential to integrate container availability into the freezer logging flow. No priority set.
 
 ### Structured allergen management
 The current exclusions field is free text, which works fine for a personal family app where the AI understands context. A proper allergen system — predefined chips for the 14 EU allergens (gluten, laktose, nøtter, egg, skalldyr, etc.) plus a free-text overflow field — would reduce typo risk. For a single family the free-text field is sufficient.
