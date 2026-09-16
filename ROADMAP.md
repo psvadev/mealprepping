@@ -27,18 +27,12 @@ The current exclusions field is free text, which works fine for a personal famil
 
 ## Audit backlog (September 2026)
 
-Remaining findings from the September 2026 audit. The P1 and P2 findings and nine P3s are already fixed; these are what's left, roughly in the order they're worth doing.
+Remaining findings from the September 2026 audit. The P1 and P2 findings and nine P3s were fixed in the first pass; a second pass cleared ten more — D10 (quota banner + recipe-cache eviction), D14 (stale shopping list no longer auto-regenerates over your check-offs), L11/L12 (rounded totals), PF1/PF2 (hash-skipped uploads, three concurrent recipe loads), D15 (`navigator.storage.persist()` + "last export" line), L10 (drag highlight in state), L15/L17/L18 (manual-dish filtering, the mobile breakpoint, kr/porsjon/dag) and S3 (revoke the refresh token in a POST body). All are covered by `test_phase5.py`.
 
-- **D10 storage full fails silently** — `lsSet` swallows `QuotaExceededError`, and the recipe cache is never pruned. Once the quota is hit, plan and freezer edits stop persisting with no warning. Fix: return a boolean, show a banner, evict the oldest recipes not in the plan or favourites.
-- **D14 shopping check-offs** — tapping a week tab regenerates a stale list and wipes the ticks mid-shop; opening `#shopping` directly shows a stale list with no warning. Fix: a "plan changed, regenerate?" banner instead of automatic regeneration.
-- **L11 / L12 AI numbers** — nutrition sums and batch-time minutes join strings when the model returns `"25g"` or `"25"`, and show floating-point noise. Partly mitigated by `normalizeRecipe`; the display still needs rounding.
-- **PF1 / PF2 sync and loading cost** — every change uploads the whole payload including the recipe cache; recipes still load one at a time (Kassal lookups are already parallel). Fix: skip unchanged uploads by hash, load ~3 recipes concurrently.
-- **D15 Safari eviction** — no `navigator.storage.persist()`; Safari can clear everything after 7 days without a visit. Fix: request persistence, and show "last export" in Settings when Drive isn't connected.
-- **L10 drag highlight** — clearing `style.borderColor` leaves cells with the wrong border until they re-render. Fix: track a `dragOverCell` state instead of touching the DOM.
-- **L15 / L17 / L18 smaller UI bugs** — manual dishes hidden by the max-time filter, `isMobile` using the shorter screen side (a 1366×768 laptop at 125% gets the mobile layout), and "kr/porsjon/dag" always dividing by 7 days.
-- **D8 portions stepper** — one misclick still clears cached recipes and shopping lists. Now cheap to fix: tag each cached recipe with its portions/units instead of clearing.
-- **S3 disconnect** — revoke sends the access token, which may be expired, so the refresh token can stay valid. Fix: send the refresh token in a form body and check the response.
-- **S5–S8, D16, L19, PF3** — low-severity items: no OAuth `state` parameter (PKCE covers the real risk), client secret in localStorage (an accepted trade-off), no client-side check that AI output respects the allergen exclusions, personal email in early public commits, various missing undo toasts, and one large component re-rendering on every keystroke.
+These are what's left, roughly in the order they're worth doing.
+
+- **D8 portions stepper** — one misclick still clears cached recipes and shopping lists. Fix: tag each cached recipe with its portions/units and select by scale, instead of clearing the cache. This is the only remaining item with real data cost, and the largest of the four: every `recipeCache[name]` read has to go through the scale-aware view.
+- **S5–S8, D11, D16, L19, PF3** — low-severity items: no OAuth `state` parameter (PKCE covers the real risk), client secret in localStorage (an accepted trade-off), no client-side check that AI output respects the allergen exclusions, personal email in early public commits, various missing undo toasts, and one large component re-rendering on every keystroke.
 
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
 

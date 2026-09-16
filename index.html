@@ -99,8 +99,22 @@ function lsGet(key, fallback) {
   try { const v = localStorage.getItem(PFX + key); return v !== null ? JSON.parse(v) : fallback; }
   catch { return fallback; }
 }
+// A failed write means the quota is full — the app has to say so instead of losing edits silently
+let storageFullHandler = null;
+function setStorageFullHandler(fn) { storageFullHandler = fn; }
 function lsSet(key, value) {
-  try { localStorage.setItem(PFX + key, JSON.stringify(value)); } catch {}
+  try { localStorage.setItem(PFX + key, JSON.stringify(value)); return true; }
+  catch { try { storageFullHandler?.(key); } catch {} return false; }
+}
+// The recipe cache is the only slice that grows without bound, and it can be re-fetched:
+// drop everything that isn't planned or starred before warning the user
+function pruneRecipeCache(cache, plan, favourites) {
+  const keep = new Set();
+  for (const week of plan || []) for (const meal of week || []) if (meal?.name) keep.add(meal.name);
+  for (const fav of favourites || []) if (fav?.name) keep.add(fav.name);
+  const out = {};
+  for (const [name, recipe] of Object.entries(cache || {})) if (keep.has(name)) out[name] = recipe;
+  return out;
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────
@@ -460,8 +474,11 @@ function App() {
   const [lastShoppingKeys,setLastShoppingKeys]=useState(() => lsGet('lastShoppingKeys',{}));
   const [checkedItems,  setCheckedItems]  = useState(() => lsGet('checkedItems', {}));
   const [notesDraft,    setNotesDraft]    = useState('');
+  const [dragOverCell,  setDragOverCell]  = useState(null);   // {week,day} currently under a drag
+  const [storageFull,   setStorageFull]   = useState(false);
+  const [lastExportAt,  setLastExportAt]  = useState(() => lsGet('lastExportAt', null));
 
-  const [isMobile, setIsMobile] = useState(() => Math.min(window.innerWidth, window.innerHeight) < 640);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   const [mobileWeek, setMobileWeek] = useState(0);
 
   // Google Drive sync state
@@ -475,7 +492,7 @@ function App() {
   const [hadDriveConnection] = useState(() => !!lsGet('driveFileId', null));
 
   useEffect(() => {
-    const handler = () => setIsMobile(Math.min(window.innerWidth, window.innerHeight) < 640);
+    const handler = () => setIsMobile(window.innerWidth < 640);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
@@ -527,31 +544,34 @@ function App() {
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
-  useEffect(() => lsSet('anthropicKey',    anthropicKey),    [anthropicKey]);
-  useEffect(() => lsSet('kassalKey',       kassalKey),       [kassalKey]);
-  useEffect(() => lsSet('weeks',           weeks),           [weeks]);
-  useEffect(() => lsSet('portions',        portions),        [portions]);
-  useEffect(() => lsSet('plan',            plan),            [plan]);
-  useEffect(() => lsSet('suggestions',     suggestions),     [suggestions]);
-  useEffect(() => lsSet('favourites',      favourites),      [favourites]);
-  useEffect(() => lsSet('freezerItems',   freezerItems),    [freezerItems]);
-  useEffect(() => lsSet('dislikedMeals',  dislikedMeals),   [dislikedMeals]);
-  useEffect(() => lsSet('mealHistory',     mealHistory),     [mealHistory]);
-  useEffect(() => lsSet('mealNotes',       mealNotes),       [mealNotes]);
-  useEffect(() => lsSet('proteinTargets',  proteinTargets),  [proteinTargets]);
-  useEffect(() => lsSet('cuisineTargets',  cuisineTargets),  [cuisineTargets]);
-  useEffect(() => lsSet('enabledCuisines', enabledCuisines), [enabledCuisines]);
-  useEffect(() => lsSet('maxTime',         maxTime),         [maxTime]);
-  useEffect(() => lsSet('exclusions',      exclusions),      [exclusions]);
-  useEffect(() => lsSet('suggestionCount', suggestionCount), [suggestionCount]);
-  useEffect(() => lsSet('units',           units),           [units]);
-  useEffect(() => lsSet('recipeCache',     recipeCache),     [recipeCache]);
-  useEffect(() => lsSet('shoppingLists',    shoppingLists),    [shoppingLists]);
-  useEffect(() => lsSet('lastShoppingKeys', lastShoppingKeys), [lastShoppingKeys]);
-  useEffect(() => lsSet('checkedItems',     checkedItems),     [checkedItems]);
-  useEffect(() => lsSet('googleClientId',     googleClientId),     [googleClientId]);
-  useEffect(() => lsSet('googleClientSecret', googleClientSecret), [googleClientSecret]);
-  useEffect(() => lsSet('driveSyncedAt',    driveSyncedAt),    [driveSyncedAt]);
+  // Block bodies, not expression bodies: lsSet returns a boolean, and React would take a
+  // returned non-function as the effect's cleanup and throw when it tries to call it.
+  useEffect(() => { lsSet('anthropicKey',      anthropicKey);       }, [anthropicKey]);
+  useEffect(() => { lsSet('kassalKey',         kassalKey);          }, [kassalKey]);
+  useEffect(() => { lsSet('weeks',             weeks);              }, [weeks]);
+  useEffect(() => { lsSet('portions',          portions);           }, [portions]);
+  useEffect(() => { lsSet('plan',              plan);               }, [plan]);
+  useEffect(() => { lsSet('suggestions',       suggestions);        }, [suggestions]);
+  useEffect(() => { lsSet('favourites',        favourites);         }, [favourites]);
+  useEffect(() => { lsSet('freezerItems',      freezerItems);       }, [freezerItems]);
+  useEffect(() => { lsSet('dislikedMeals',     dislikedMeals);      }, [dislikedMeals]);
+  useEffect(() => { lsSet('mealHistory',       mealHistory);        }, [mealHistory]);
+  useEffect(() => { lsSet('mealNotes',         mealNotes);          }, [mealNotes]);
+  useEffect(() => { lsSet('proteinTargets',    proteinTargets);     }, [proteinTargets]);
+  useEffect(() => { lsSet('cuisineTargets',    cuisineTargets);     }, [cuisineTargets]);
+  useEffect(() => { lsSet('enabledCuisines',   enabledCuisines);    }, [enabledCuisines]);
+  useEffect(() => { lsSet('maxTime',           maxTime);            }, [maxTime]);
+  useEffect(() => { lsSet('exclusions',        exclusions);         }, [exclusions]);
+  useEffect(() => { lsSet('suggestionCount',   suggestionCount);    }, [suggestionCount]);
+  useEffect(() => { lsSet('units',             units);              }, [units]);
+  useEffect(() => { lsSet('recipeCache',       recipeCache);        }, [recipeCache]);
+  useEffect(() => { lsSet('shoppingLists',     shoppingLists);      }, [shoppingLists]);
+  useEffect(() => { lsSet('lastShoppingKeys',  lastShoppingKeys);   }, [lastShoppingKeys]);
+  useEffect(() => { lsSet('checkedItems',      checkedItems);       }, [checkedItems]);
+  useEffect(() => { lsSet('googleClientId',    googleClientId);     }, [googleClientId]);
+  useEffect(() => { lsSet('googleClientSecret',googleClientSecret); }, [googleClientSecret]);
+  useEffect(() => { lsSet('driveSyncedAt',     driveSyncedAt);      }, [driveSyncedAt]);
+  useEffect(() => { lsSet('lastExportAt',      lastExportAt);       }, [lastExportAt]);
 
   // Keep week selectors in range when the number of weeks shrinks
   useEffect(() => {
@@ -559,6 +579,27 @@ function App() {
     setShoppingWeek(w => Math.min(w, weeks - 1));
     setActiveCell(c => c && c.week >= weeks ? null : c);
   }, [weeks]);
+
+  // A full quota silently drops every later write. Evict the re-fetchable recipe cache once,
+  // and only if a write still fails after that tell the user their edits aren't being saved.
+  const evictedRef = useRef(false);
+  useEffect(() => {
+    setStorageFullHandler(() => {
+      if (!evictedRef.current) {
+        evictedRef.current = true;
+        const p = payloadRef.current;
+        setRecipeCache(c => pruneRecipeCache(c, p?.plan, p?.favourites));
+        return;
+      }
+      setStorageFull(true);
+    });
+    return () => setStorageFullHandler(null);
+  }, []);
+
+  // Safari clears localStorage after 7 days without a visit unless storage is marked persistent
+  useEffect(() => {
+    try { navigator.storage?.persisted?.().then(p => { if (!p) navigator.storage.persist?.(); }).catch(() => {}); } catch {}
+  }, []);
 
   // Sync note draft when modal opens
   useEffect(() => {
@@ -627,6 +668,8 @@ function App() {
       t.fat += r.nutrition.fat||0; t.carbs += r.nutrition.carbs||0; t.fiber += r.nutrition.fiber||0;
       count++;
     }
+    // AI values can carry decimals; summing them shows floating-point noise
+    for (const k of Object.keys(t)) t[k] = Math.round(t[k]);
     return { ...t, count };
   }), [plan, weeks, recipeCache]);
 
@@ -647,7 +690,7 @@ function App() {
       passiveTimes.sort((a, b) => b - a);
       let passiveEst = 0;
       for (let i = 0; i < passiveTimes.length; i += 4) passiveEst += passiveTimes[i];
-      return { estimated: sumActive + passiveEst, count, allLoaded };
+      return { estimated: Math.round(sumActive + passiveEst), count, allLoaded };
     }),
   [plan, weeks, recipeCache]);
 
@@ -661,7 +704,8 @@ function App() {
   const filteredSuggestions = useMemo(() => suggestions.filter(m => {
     if (filterProtein && m.protein !== filterProtein) return false;
     if (filterCategory && m.category !== filterCategory) return false;
-    if (m.prepTime) { const mins=parseInt(m.prepTime); if (!isNaN(mins) && mins>maxTime) return false; }
+    // Manually added dishes were asked for by name: never hide them behind the time filter
+    if (m.prepTime && !m.batchScore) { const mins=parseInt(m.prepTime); if (!isNaN(mins) && mins>maxTime) return false; }
     return true;
   }), [suggestions, filterProtein, filterCategory, maxTime]);
 
@@ -832,10 +876,12 @@ function App() {
     const unique = [...new Map(meals.map(m=>[m.name,m])).values()];
     const scale = { portions, units };
     const failed = [];
-    for (const meal of unique) {
-      const ok = await fetchRecipe(meal);
+    // Three at a time: a full week loads in a third of the wall time without hammering the API
+    for (let i = 0; i < unique.length; i += 3) {
+      const batch = unique.slice(i, i + 3);
+      const results = await Promise.all(batch.map(m => fetchRecipe(m)));
       if (scaleRef.current.portions !== scale.portions || scaleRef.current.units !== scale.units) return;
-      if (ok === false) failed.push(meal.name);
+      batch.forEach((m, j) => { if (results[j] === false) failed.push(m.name); });
     }
     if (failed.length) setError(`Kunne ikke laste oppskrift for: ${failed.join(', ')}. Prøv igjen.`);
   };
@@ -989,6 +1035,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory, dislikedMeals]);
 
   // ── Shopping list ─────────────────────────────────────────────────────────
+  // Opening a list never regenerates it: regenerating wipes the check-offs, which is exactly
+  // what you don't want halfway round the shop. A stale week gets a banner instead.
+  const openShoppingList = (week) => {
+    if (week === undefined) week = shoppingWeek;
+    setShoppingWeek(week);
+    setView("shopping");
+    if (!shoppingLists[week]) generateShoppingList(week, true);
+  };
+
   const generateShoppingList = async (week, force=false) => {
     if (week === undefined) week = shoppingWeek;
     setShoppingWeek(week);
@@ -1078,6 +1133,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       favourites, mealNotes, mealHistory, freezerItems, dislikedMeals, exportedAt: new Date().toISOString() };
     const date = localDateString();
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
+    setLastExportAt(new Date().toISOString());
   };
 
   const importPlan = (e) => {
@@ -1301,9 +1357,17 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   const disconnectGoogleDrive = useCallback(async () => {
     const t = lsGet('driveToken', null);
     if (t) {
-      const token = t.access_token || t.refresh_token;
+      // Revoking the refresh token drops the whole grant; an access token may already be expired,
+      // which would leave the refresh token valid. Send it in the body, not the URL.
+      const token = t.refresh_token || t.access_token;
       if (token) {
-        try { await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method:'POST' }); } catch {}
+        try {
+          await fetch('https://oauth2.googleapis.com/revoke', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token })
+          });
+        } catch {}
       }
     }
     localStorage.removeItem('mp_driveToken');
@@ -1550,7 +1614,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {/* View tabs + actions */}
             <div style={{ marginLeft:"auto", display:"flex", gap:5, flexWrap:"wrap", alignItems:"center" }}>
               <button onClick={()=>setView("plan")} style={btnTab(view==="plan")}>📅 Plan</button>
-              <button onClick={()=>generateShoppingList(shoppingWeek)} style={btnTab(view==="shopping")}>
+              <button onClick={()=>openShoppingList(shoppingWeek)} style={btnTab(view==="shopping")}>
                 🛒 Handleliste
               </button>
               <button onClick={()=>setView("fryser")} style={btnTab(view==="fryser")}>
@@ -1660,6 +1724,21 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
           </div>
         )}
 
+        {storageFull && (
+          <div style={{ background:"#2a1a1a", border:"1px solid #6a3a3a", borderRadius:8,
+            padding:"10px 14px", marginBottom:14, fontSize:12, color:"#d4a0a0",
+            fontFamily:"sans-serif", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+            <span style={{ flex:1 }}>
+              ⚠ Lagringen er full — endringene dine blir ikke lagret. Eksporter planen, og tøm
+              oppskriftsbufferen under Innstillinger → Data for å frigjøre plass.
+            </span>
+            <button onClick={()=>{ evictedRef.current = false; setStorageFull(false); lsSet('plan', plan); }}
+              style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a", flexShrink:0,
+                background:"transparent", color:"#d4a0a0", cursor:"pointer",
+                fontSize:11, fontFamily:"sans-serif" }}>↩ Prøv igjen</button>
+          </div>
+        )}
+
         {/* ── PLAN VIEW ── */}
         {view==="plan" && (
           <>
@@ -1699,6 +1778,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       {Array.from({length:7},(_,d) => {
                         const meal = plan[w][d];
                         const isActive = activeCell?.week===w && activeCell?.day===d;
+                        const isDragOver = dragOverCell?.week===w && dragOverCell?.day===d;
                         const pColor = meal?.leftover ? null : meal?.protein ? PROTEINS.find(p=>p.key===meal.protein)?.color : null;
                         const hasNote = meal && !meal.leftover && mealNotes[meal.name];
                         return (
@@ -1710,10 +1790,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                   else { setPlanModal({meal,week:w,day:d}); if (!meal.leftover) fetchRecipe(meal); }
                                 } else { setActiveCell(isActive ? null : {week:w,day:d}); }
                               }}
-                              onDragOver={e=>{ if(dragMeal){e.preventDefault();e.currentTarget.style.borderColor="#e8a838";e.currentTarget.style.background="#1e1c14";}}}
-                              onDragLeave={e=>{ e.currentTarget.style.borderColor=""; e.currentTarget.style.background=""; }}
+                              onDragOver={e=>{ if(dragMeal){ e.preventDefault(); setDragOverCell(c => (c?.week===w && c?.day===d) ? c : {week:w,day:d}); } }}
+                              onDragLeave={()=>setDragOverCell(c => (c?.week===w && c?.day===d) ? null : c)}
                               onDrop={e=>{
-                                e.preventDefault(); e.currentTarget.style.borderColor=""; e.currentTarget.style.background="";
+                                e.preventDefault(); setDragOverCell(null);
                                 if (!dragMeal) return;
                                 const existing=plan[w][d];
                                 if (dragSource) {
@@ -1728,8 +1808,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               }}
                               className="grid-cell"
                               style={{ minHeight:90, height:"100%", boxSizing:"border-box", borderRadius:8,
-                                border: isActive ? "2px solid #e8a838" : meal ? `1px solid ${pColor||"#2a2b30"}55` : "1px dashed #22232a",
-                                background: meal ? "#1c1d21" : isActive ? "#141517" : "transparent",
+                                border: (isDragOver || isActive) ? "2px solid #e8a838" : meal ? `1px solid ${pColor||"#2a2b30"}55` : "1px dashed #22232a",
+                                background: isDragOver ? "#1e1c14" : meal ? "#1c1d21" : isActive ? "#141517" : "transparent",
                                 cursor:"pointer", padding:"9px 6px 12px",
                                 display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
                                 gap:2, transition:"border 0.1s, background 0.1s", position:"relative" }}
@@ -1894,7 +1974,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     {favourites.map((meal,i) => (
                       <div key={i} draggable
                         onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
-                        onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
+                        onDragEnd={()=>{setDragMeal(null);setDragSource(null);setDragOverCell(null);}}
                         onClick={()=>{
                           if (activeCell) { assignMeal(meal,activeCell.week,activeCell.day); }
                           else { setSuggestions(prev=>prev.find(m=>m.name===meal.name)?prev:[meal,...prev]); setShowFavourites(false); }
@@ -1961,7 +2041,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     })}
                     <div draggable
                       onDragStart={e=>{setDragMeal(LEFTOVER_MEAL);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
-                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
+                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);setDragOverCell(null);}}
                       onClick={()=>{ if(activeCell) assignMeal(LEFTOVER_MEAL,activeCell.week,activeCell.day); }}
                       style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px",
                         borderRadius:10, border:"1px dashed #2a2b30", background:"transparent",
@@ -2036,7 +2116,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                   return (
                     <div key={i} draggable
                       onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
-                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);}}
+                      onDragEnd={()=>{setDragMeal(null);setDragSource(null);setDragOverCell(null);}}
                       onClick={()=>toggleCard(meal)}
                       onMouseEnter={e=>e.currentTarget.style.borderColor=activeCell?"#e8a838":"#2e2d38"}
                       onMouseLeave={e=>e.currentTarget.style.borderColor="#22232a"}
@@ -2135,7 +2215,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 const checkedCount = Object.keys(checkedItems[w] || {}).length;
                 const totalCount = shoppingLists[w]?.categories?.reduce((s,c)=>s+c.items.length,0) || 0;
                 return (
-                  <button key={w} onClick={()=>generateShoppingList(w)}
+                  <button key={w} onClick={()=>openShoppingList(w)}
                     style={{ padding:"6px 16px", borderRadius:7, cursor:"pointer", fontFamily:"sans-serif",
                       border: isActive ? "2px solid #e8a838" : "1px solid #2a2b30",
                       background: isActive ? "#22232a" : "transparent",
@@ -2166,8 +2246,21 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 if (!cached) return true;
                 return getIngredients(cached).length === 0;
               });
+              const isStale = lastShoppingKeys[shoppingWeek] !== weekPlanKey(shoppingWeek);
               return (
                 <>
+                  {isStale && (
+                    <div style={{ background:"#1c1a12", border:"1px solid #3a3015", borderRadius:8,
+                      padding:"10px 14px", marginBottom:14, fontSize:12, color:"#c8a84a", fontFamily:"sans-serif",
+                      display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+                      ⚠ Planen er endret siden denne listen ble laget.
+                      <button onClick={() => generateShoppingList(shoppingWeek, true)} style={{
+                        background:"#3a3015", border:"1px solid #4a3a1a", borderRadius:6,
+                        color:"#e8a838", fontSize:11, fontFamily:"sans-serif", padding:"4px 10px",
+                        cursor:"pointer", whiteSpace:"nowrap", flexShrink:0
+                      }}>Oppdater listen</button>
+                    </div>
+                  )}
                   {frozenMeals.length > 0 && (
                     <div style={{ background:"#141c1f", border:"1px solid #1e3a4a", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7abfcf", fontFamily:"sans-serif" }}>
@@ -2205,7 +2298,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         Estimert totalpris uke {shoppingWeek+1}: ca. {sl.totalPrice.low}–{sl.totalPrice.high} kr
                       </span>
                       <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>
-                        · {Math.round((sl.totalPrice.low+sl.totalPrice.high)/2/portions/7)} kr/porsjon/dag ca.
+                        · {Math.round((sl.totalPrice.low+sl.totalPrice.high)/2/portions/Math.max(1, plan[shoppingWeek].filter(Boolean).length))} kr/porsjon/dag ca.
                       </span>
                     </div>
                   )}
@@ -2610,6 +2703,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>⬇ Eksporter handleliste (.txt)</button>
                 )}
               </div>
+              {!driveConnected && (
+                <div style={{ marginTop:10, fontSize:11, fontFamily:"sans-serif",
+                  color: lastExportAt ? "#747280" : "#c8a84a" }}>
+                  {lastExportAt
+                    ? `Sist eksportert ${new Date(lastExportAt).toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"})}.`
+                    : "⚠ Dataene er aldri eksportert, og Google Drive er ikke koblet til. Da finnes planen kun i denne nettleseren."}
+                </div>
+              )}
               <div style={{ marginTop:16, paddingTop:16, borderTop:"1px solid #22232a" }}>
                 <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                   letterSpacing:"0.5px", fontWeight:600, marginBottom:10 }}>RESETT</div>
@@ -3101,7 +3202,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         NÆRING PER PORSJON{recipe.portionWeightGrams ? <span style={{ fontWeight:400, color:"#747280", marginLeft:6 }}>· ca. {recipe.portionWeightGrams} g</span> : null}
                       </div>
                       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                        {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${recipe.nutrition[f.key]}${f.unit}`, color:f.color})).map(n => (
+                        {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${Math.round(recipe.nutrition[f.key])}${f.unit}`, color:f.color})).map(n => (
                           <div key={n.label} style={{ flex:"1 1 90px", display:"flex", flexDirection:"column",
                             alignItems:"center", padding:"10px 8px", background:"#1c1d21", borderRadius:8, gap:4 }}>
                             <span style={{ fontSize:14, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
@@ -3248,7 +3349,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                         NÆRING PER PORSJON{recipe.portionWeightGrams ? <span style={{ fontWeight:400, color:"#747280", marginLeft:6 }}>· ca. {recipe.portionWeightGrams} g</span> : null}
                       </div>
                       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                        {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${recipe.nutrition[f.key]}${f.unit}`, color:f.color})).map(n => (
+                        {NUTRITION_FIELDS.map(f => ({label:f.label, val:`${Math.round(recipe.nutrition[f.key])}${f.unit}`, color:f.color})).map(n => (
                           <div key={n.label} style={{ flex:"1 1 90px", display:"flex", flexDirection:"column",
                             alignItems:"center", padding:"10px 8px", background:"#1c1d21", borderRadius:8, gap:4 }}>
                             <span style={{ fontSize:14, fontWeight:700, color:n.color, fontFamily:"sans-serif" }}>{n.val}</span>
@@ -3327,7 +3428,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         <div style={{ flexShrink:0, background:"#18191c", borderTop:"1px solid #2a2b30", display:"flex", height:56 }}>
           {[
             { label:"Plan",         emoji:"📅", action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("plan"); },                          key:"plan" },
-            { label:"Handleliste",  emoji:"🛒", action:()=>{ setPlanModal(null); setSuggestionModal(null); generateShoppingList(shoppingWeek); },       key:"shopping" },
+            { label:"Handleliste",  emoji:"🛒", action:()=>{ setPlanModal(null); setSuggestionModal(null); openShoppingList(shoppingWeek); },           key:"shopping" },
             { label:"Fryser",       emoji:"❄️", action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("fryser"); },                        key:"fryser" },
             { label:"Innstillinger",emoji:"⚙",  action:()=>{ setPlanModal(null); setSuggestionModal(null); setView("settings"); },                     key:"settings" },
           ].map(tab => (

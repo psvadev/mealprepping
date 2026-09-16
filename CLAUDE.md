@@ -61,6 +61,7 @@ All keys use the `mp_` prefix.
 | `mp_driveSyncedAt` | string | ISO timestamp of last successful sync |
 | `mp_driveSyncedHash` | string | Hash of the last payload this device and Drive agreed on — the base for three-way sync decisions |
 | `mp_preImportBackup` | object | Data replaced by the last import (without recipe cache) — powers "Angre siste import" |
+| `mp_lastExportAt` | string | ISO timestamp of the last plan export — drives the "Sist eksportert" line in Settings |
 
 ---
 
@@ -82,13 +83,13 @@ Navigation is hash-only (`#plan`, `#shopping`, `#fryser`, `#settings`): `setView
 ## Plan view
 
 - **Weekly grid** — table of weeks × days. Cells show meal emoji, name, and a `ProteinBadge` pill. Click empty cell to enter "select mode" (amber highlight); click meal card to assign. Drag meal cards directly onto cells. All cells in a row share equal height regardless of content.
-- **Drag and drop** — `draggable` on suggestion/favourite cards and on meals already in the grid. `onDragOver`/`onDrop` on grid cells. A `dragSource` state (`{week,day}` or `null`) distinguishes the two cases: dragging from the grid to another grid cell **swaps** the two meals; dragging from suggestions/favourites onto an occupied cell displaces the existing meal back to suggestions — also when the incoming item is a leftover day. Removing a leftover day from the plan never adds it to suggestions.
+- **Drag and drop** — `draggable` on suggestion/favourite cards and on meals already in the grid. `onDragOver`/`onDrop` on grid cells. The hover highlight is React state (`dragOverCell`), not a direct `e.currentTarget.style` write — writing inline styles during a drag left cells stuck with the wrong border until something re-rendered them. A `dragSource` state (`{week,day}` or `null`) distinguishes the two cases: dragging from the grid to another grid cell **swaps** the two meals; dragging from suggestions/favourites onto an occupied cell displaces the existing meal back to suggestions — also when the incoming item is a leftover day. Removing a leftover day from the plan never adds it to suggestions.
 - **Plan modal** — clicking an assigned meal opens a detail modal with recipe, nutrition, price, and a notes textarea. Header includes a ★ favourite button (amber when active) to star/unstar the meal without leaving the modal. Separate 🗑 Fjern fra plan button prevents accidental deletion. Notes are saved to `mp_mealNotes` 500 ms after typing stops and again on close (all close paths call `saveNote`); an empty note removes the key instead of storing `''`. ESC closes the modal (saves notes first).
 - **Suggestion modal** — clicking an expanded suggestion card opens a detail overlay. ESC closes it (priority over plan modal in the shared ESC handler).
 - **Protein stats column** — rightmost grid column shows actual vs. target counts per protein type for each week.
 - **Weekly batch time estimate** — shown below the grid for each week with at least one non-leftover meal. When recipes are cached, uses `activeMins` + `passiveMins` fields returned by `fetchRecipe`: active prep is serial (`sum(activeMins)`); passive cooking assumes 4 concurrent slots (1 oven + 3 burner simmers) — passive times sorted descending, grouped into fours, sum the max of each group. Only shown when every non-leftover meal in the week has a cached recipe with `activeMins` — hidden until all recipes are loaded to avoid showing a misleading prepTime-based overestimate. Shows single `≈ Xt Ymin` estimate. Card uses `width: fit-content` so it doesn't span the full container. Border and value shift amber with a `⚠` prefix when estimate exceeds 480 min (8 hours).
-- **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache` as 1 portion of each planned meal; updates automatically as recipes load. Label format: `NÆRING UKE N — 1 porsjon × M middager (ukestotal per person)`.
-- **Load all recipes button** — "Last alle oppskrifter" appears above the nutrition summary when uncached planned meals exist. Calls `fetchAllRecipes()` which iterates unique planned meals and fetches each sequentially.
+- **Weekly nutrition summary** — shown below the grid for weeks where at least one meal has recipe data loaded. Summed from `mp_recipeCache` as 1 portion of each planned meal; updates automatically as recipes load. Totals are rounded — AI values carry decimals, and summing them otherwise shows floating-point noise like `300.29999999999995 kcal`. Label format: `NÆRING UKE N — 1 porsjon × M middager (ukestotal per person)`.
+- **Load all recipes button** — "Last alle oppskrifter" appears above the nutrition summary when uncached planned meals exist. Calls `fetchAllRecipes()`, which loads unique planned meals **three at a time** — a full week finishes in roughly a third of the wall time without hammering the API. Each batch still re-checks `scaleRef`, so a portions/units change mid-load discards the rest.
 - **Progress bar** — filled days vs. total slots for active weeks.
 - **Favourites panel** — toggled via ★ button. Shows starred meals as draggable chips; clicking one adds it back to the suggestion list.
 - **Suggestion cards** — grid of AI-generated meals. Clicking a card opens the suggestion modal (full detail overlay) showing name, badges, description, and a "Last inn oppskrift" button. Recipe is **not** fetched on card click — only fetched when a meal is already in the plan. Drag to grid or click in select mode to assign. Manually added cards additionally show a ✏ pencil icon in the top-right (beside the prep time badge) and a snowflake batch score (`❄❄···`) on their own row below the protein/category badges.
@@ -96,7 +97,7 @@ Navigation is hash-only (`#plan`, `#shopping`, `#fryser`, `#settings`): `setView
 - **Manual meal entry** — text input below the generate/clear buttons. Typing a meal name and pressing Enter or "Legg til" calls `addManualMeal()` (max_tokens: 1200), which always returns 3 variants of the dish. The variants appear in a centered modal ("Velg en rett") — the user picks one, which is then prepended to `suggestions`. Duplicate guard prevents adding a meal already in the list. Loading state ("Legger til…") and error feedback shown inline. Exclusions/allergens are applied to this prompt (same wording as `generateSuggestions`). Store-bought components (pizzabunn, tortillas, etc.) are explicitly allowed. Manually added cards show a ✏ pencil icon in the top-right and a ✕ remove button (gated by `meal.batchScore`). `batchScore` is 1–5: how well the dish suits batch cooking and freezing (1 = poor, e.g. sushi; 5 = ideal, e.g. stews). AI-generated suggestions intentionally omit `batchScore` — they are already enforced batch-friendly by the prompt, so a score would always be high and uninformative. The suggestion modal shows a scored block with a spelled-out label ("Ikke egnet for batch", "Perfekt for batch", etc.) and a tinted border when `batchScore` is present.
 - **"→ Fryser" button** — appears in the week label cell when the week has at least one non-leftover meal. Calls `addWeekToFreezer(week)`, which logs all non-leftover meals for that week to `mp_freezerItems` with `remaining = total = portions` and `cookedAt = today`, then navigates to the Fryser view.
 - **"✕ Tøm" button** — clears the plan. Located beside the generate button in the suggestions panel (not in the nav bar).
-- **Maks tid slider** — inline in the suggestions action row (beside "Tøm"), not in the header. Controls max prep time for generation and filters the visible suggestion cards client-side.
+- **Maks tid slider** — inline in the suggestions action row (beside "Tøm"), not in the header. Controls max prep time for generation and filters the visible suggestion cards client-side. **Manually added dishes (those carrying a `batchScore`) are exempt** — the user asked for that dish by name, so it must not vanish because it takes longer than the slider allows.
 
 ---
 
@@ -161,6 +162,7 @@ Freezer inventory for tracking batch-cooked portions.
 
 ## Shopping view
 
+- **Opening a list never regenerates it.** `openShoppingList(week)` only navigates, and generates solely when that week has no list at all. Regenerating wipes the week's check-offs, so it must be a deliberate act — otherwise tapping a week tab mid-shop silently erases everything already ticked off. When the plan has changed since the list was built (`lastShoppingKeys[week] !== weekPlanKey(week)`), an amber "Planen er endret siden denne listen ble laget" banner offers "Oppdater listen" instead.
 - **Week tabs** — one tab per active week. Shows a `checkedCount/totalCount` amber fraction badge when any items are checked for that week.
 - **Check-off** — each item `<li>` is clickable (`cursor: pointer`). Clicking toggles `checkedItems[week][catName|itemName]`. Checked items show name with `line-through`, dimmed color, and 55% opacity. Sub-items are hidden while the parent is checked.
 - **"✕ Nullstill" button** — appears in the shopping header only when ≥1 item is checked for the current week. Clears all checked items for that week. Styled as a ghost/outline button matching the other header buttons.
@@ -188,7 +190,15 @@ Imported files, Drive backups, stored localStorage data and AI replies are treat
 - `normalizeMeal`, `normalizeShoppingList` (every category gets an `items` array, amounts become strings) and `normalizeRecipe` (numeric nutrition and minutes, array `tips`/`steps`) are also applied to AI replies.
 - `ErrorBoundary` wraps `<App />`: a render crash shows "Noe gikk galt" with "Gå til planen", "Last ned data (.json)" (all `mp_` data except keys and tokens) and "Prøv igjen", instead of a blank page.
 
-These helpers, plus `esc()`, `hashString`, `decideSync`, `freezerCoverage`, `kassalSkip`, `kassalSearchWord`, `localDateString` and `daysSince`, are top-level so Playwright tests can call them through `page.evaluate`.
+These helpers, plus `esc()`, `hashString`, `decideSync`, `freezerCoverage`, `kassalSkip`, `kassalSearchWord`, `localDateString`, `daysSince` and `pruneRecipeCache`, are top-level so Playwright tests can call them through `page.evaluate`.
+
+### Storage limits
+
+`lsSet` returns `true`/`false` and calls a module-level handler on a failed write, so a full quota can't drop edits silently. The first failure evicts the recipe cache down to planned and starred dishes (`pruneRecipeCache` — recipes are re-fetchable and already excluded from exports); only if a write fails *again* does the app show the red "Lagringen er full" banner, which appears on every view.
+
+**Every persistence effect must use a block body** — `useEffect(() => { lsSet(...); }, [x])`, never `useEffect(() => lsSet(...), [x])`. An expression-bodied arrow returns `lsSet`'s boolean, React takes a returned non-function as the effect's cleanup, and the production React build throws `TypeError: c is not a function` on the next re-run, white-screening the app into the ErrorBoundary. This is not caught by the dev-mode warning because the app ships the production build.
+
+`navigator.storage.persist()` is requested once on mount so Safari doesn't evict everything after 7 days without a visit.
 
 ---
 
@@ -221,7 +231,7 @@ Auto-saves to a single JSON file (`reheat-and-eat-backup.json`) in the user's Dr
 - PKCE verifier stored in `localStorage` (not `sessionStorage`) to survive cross-origin redirects on mobile.
 - `getValidAccessToken` refreshes the access token automatically using the stored refresh token.
 - If the refresh returns `invalid_grant` (e.g. user revoked access externally), the token is cleared and `driveStatus` is set to `'expired'`. Callers detect the `'TOKEN_EXPIRED'` sentinel and show an amber reconnect prompt in settings. Any other refresh failure (offline, 5xx, non-JSON) returns `'NETWORK'` and keeps the token; the status becomes `'error'` and the next trigger retries.
-- Disconnecting calls `https://oauth2.googleapis.com/revoke` to invalidate the token server-side before clearing localStorage. Manual disconnect also clears `mp_driveFileId`.
+- Disconnecting POSTs the **refresh** token to `https://oauth2.googleapis.com/revoke` in a form-encoded body (not as a URL query parameter) before clearing localStorage. Revoking the refresh token drops the whole grant; revoking the access token — which may already have expired — can leave the refresh token usable. Manual disconnect also clears `mp_driveFileId`.
 - `connectGoogleDrive` uses `useCallback` with `[googleClientId, googleClientSecret]` as deps — both must be in the array or the callback captures stale empty strings and silently does nothing.
 - **Disconnection badge** — `hadDriveConnection` state (`useState(() => !!lsGet('driveFileId', null))`) detects prior connections on startup. When `!driveConnected && googleClientId && (driveStatus==='expired' || hadDriveConnection)`, an amber **Drive** pill appears on the desktop ⚙ Innstillinger button and an amber dot on the mobile nav settings tab. Manual disconnect clears `driveFileId`, so the badge disappears after refresh (intentional — user chose to disconnect). External revocation leaves `driveFileId` intact, so the badge persists across refreshes until reconnected.
 
@@ -252,7 +262,7 @@ Sections (in display order):
 5. **Favoritter** — all starred meals shown as chips with per-item ✕ removal and a "Tøm alle" button. Empty state prompts to use ★ on a suggestion or in the plan.
 6. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
 7. **Mathistorikk** — scrollable wrapped list of recent meals as chips, with count and "Tøm historikk" button. Empty state explains meals are added automatically when assigned to the plan.
-8. **Data** — export plan (.json), import plan (.json), export shopping list (.txt). Sub-section **Resett**: "Tøm oppskriftsbuffer" (clears `mp_recipeCache`) and "Tøm ukeplan" (clears plan + shopping lists; suggestions and favourites are kept, matching the confirmation text) — both use a custom confirmation modal.
+8. **Data** — export plan (.json), import plan (.json), export shopping list (.txt). When Drive is not connected, a line below shows when the data was last exported, or warns in amber that it never has been (`mp_lastExportAt`). Sub-section **Resett**: "Tøm oppskriftsbuffer" (clears `mp_recipeCache`) and "Tøm ukeplan" (clears plan + shopping lists; suggestions and favourites are kept, matching the confirmation text) — both use a custom confirmation modal.
 
 ---
 
@@ -269,7 +279,7 @@ The active unit is injected as a sentence into the `fetchRecipe` and `generateSh
 
 ## Mobile layout
 
-Breakpoint: `window.innerWidth < 640` — tracked in `isMobile` state with a `resize` listener.
+Breakpoint: `window.innerWidth < 640` — tracked in `isMobile` state with a `resize` listener. **Use the width alone, never `Math.min(innerWidth, innerHeight)`** — that variant put any short desktop window (a 1366×768 laptop at 125% zoom, or 800×600) into the phone layout, hiding the whole header controls row on a desktop.
 
 **On mobile (< 640px):**
 - Header controls row hidden entirely (UKE, PORSJONER, Proteinmål, Kjøkken, Skriv ut)
