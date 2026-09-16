@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Scripts only from the pinned, hash-checked CDN files below; network only to the services the app uses -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.anthropic.com https://kassal.app https://oauth2.googleapis.com https://www.googleapis.com; object-src 'none'; base-uri 'self'">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧊</text></svg>">
 <title>Reheat & Eat</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scrollbar-gutter: stable; }
@@ -28,7 +30,7 @@ textarea:focus, input:focus { outline: none; }
 <body>
 <div id="root"></div>
 
-<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.8/babel.min.js" integrity="sha384-Ux6uBqExf/7ahsSNrA9VI7vuaw6sKjDoVdjdUxmIoL2qdlzFVZ157sTi6JK3Z9Q8" crossorigin="anonymous"></script>
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
@@ -111,6 +113,9 @@ function parseMeals(text) {
     return null;
   }
 }
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 const getIngredients = r => r.components ? r.components.flatMap(c => c.ingredients) : (r.ingredients || []);
 
 function downloadFile(content, filename, mimeType) {
@@ -188,29 +193,210 @@ async function generatePKCE() {
   const challenge = btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
   return { verifier, challenge };
 }
+// ── Drive sync helpers ─────────────────────────────────────────────────────
+// ── Data validation ────────────────────────────────────────────────────────
+// Imported files, Drive backups, stored data and AI replies are untrusted: normalise shapes before render
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const toStr = v => (v == null ? '' : String(v));
+function clampInt(v, lo, hi) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null;
+}
+function normalizeMeal(m) {
+  if (!isObj(m) || typeof m.name !== 'string' || !m.name.trim()) return null;
+  const out = { ...m };
+  for (const k of ['emoji', 'description', 'prepTime', 'protein', 'category']) if (m[k] != null) out[k] = toStr(m[k]);
+  if (m.batchScore != null) {
+    const s = clampInt(m.batchScore, 1, 5);
+    if (s == null) delete out.batchScore; else out.batchScore = s;
+  }
+  return out;
+}
+function normalizeShoppingList(sl) {
+  if (!isObj(sl) || !Array.isArray(sl.categories)) return null;
+  const price = p => (isObj(p) && Number.isFinite(Number(p.low)) && Number.isFinite(Number(p.high))
+    ? { low: Number(p.low), high: Number(p.high) } : null);
+  const item = i => {
+    const out = { ...i, name: toStr(i.name), amount: toStr(i.amount) };
+    if (i.items !== undefined) out.items = Array.isArray(i.items)
+      ? i.items.filter(isObj).map(s => ({ ...s, name: toStr(s.name), amount: toStr(s.amount) })) : [];
+    return out;
+  };
+  const out = { ...sl, categories: sl.categories.filter(isObj).map(c => {
+    const cat = { ...c, name: toStr(c.name), emoji: toStr(c.emoji), items: Array.isArray(c.items) ? c.items.filter(isObj).map(item) : [] };
+    if (c.price !== undefined) { const p = price(c.price); if (p) cat.price = p; else delete cat.price; }
+    return cat;
+  }) };
+  if (sl.totalPrice !== undefined) { const p = price(sl.totalPrice); if (p) out.totalPrice = p; else delete out.totalPrice; }
+  return out;
+}
+function normalizeRecipe(r) {
+  if (!isObj(r)) return null;
+  const strings = a => (Array.isArray(a) ? a.filter(x => typeof x === 'string' || typeof x === 'number').map(String) : []);
+  const out = { ...r };
+  if (r.components !== undefined) out.components = Array.isArray(r.components)
+    ? r.components.filter(isObj).map(c => ({ ...c, name: toStr(c.name), ingredients: strings(c.ingredients) })) : [];
+  if (r.ingredients !== undefined) out.ingredients = strings(r.ingredients);
+  if (r.steps !== undefined) out.steps = typeof r.steps === 'string' ? [r.steps] : strings(r.steps);
+  if (r.tips !== undefined) out.tips = typeof r.tips === 'string' ? [r.tips] : strings(r.tips);
+  if (r.nutrition !== undefined) {
+    out.nutrition = {};
+    if (isObj(r.nutrition)) for (const [k, v] of Object.entries(r.nutrition)) {
+      const n = parseFloat(v);
+      if (Number.isFinite(n)) out.nutrition[k] = n;
+    }
+  }
+  for (const k of ['activeMins', 'passiveMins', 'freezerLifeDays', 'portionWeightGrams']) {
+    if (r[k] === undefined) continue;
+    const n = parseFloat(r[k]);
+    if (Number.isFinite(n) && n >= 0) out[k] = Math.round(n); else delete out[k];
+  }
+  if (r.pricePerPortion !== undefined && !(isObj(r.pricePerPortion) && Number.isFinite(Number(r.pricePerPortion.low)))) delete out.pricePerPortion;
+  return out;
+}
+function normalizeFreezerItem(f, i) {
+  if (!isObj(f) || typeof f.name !== 'string' || !f.name.trim()) return null;
+  const remaining = clampInt(f.remaining, 0, 999) ?? 0;
+  return { ...f,
+    id: typeof f.id === 'string' && f.id ? f.id : `${Date.now()}-${i}-${f.name}`,
+    remaining,
+    total: Math.max(clampInt(f.total, 0, 999) ?? remaining, remaining),
+    cookedAt: /^\d{4}-\d{2}-\d{2}$/.test(f.cookedAt) ? f.cookedAt : localDateString(),
+    freezerLifeDays: f.freezerLifeDays == null ? null : clampInt(f.freezerLifeDays, 1, 3650) };
+}
+// Returns only the recognised, well-formed slices of an import/backup; unknown or broken slices are dropped
+function normalizeData(d) {
+  if (!isObj(d)) return null;
+  const out = {};
+  const put = (k, v) => { if (v !== null && v !== undefined) out[k] = v; };
+  if (Array.isArray(d.plan)) put('plan', Array.from({ length: 4 }, (_, w) =>
+    Array.from({ length: 7 }, (_, day) => (Array.isArray(d.plan[w]) ? normalizeMeal(d.plan[w][day]) : null))));
+  if (d.weeks != null) put('weeks', clampInt(d.weeks, 1, 4));
+  if (d.portions != null) put('portions', clampInt(d.portions, 1, 20));
+  if (Array.isArray(d.suggestions)) put('suggestions', d.suggestions.map(normalizeMeal).filter(Boolean));
+  if (Array.isArray(d.favourites)) put('favourites', d.favourites.map(normalizeMeal).filter(Boolean));
+  if (isObj(d.proteinTargets)) put('proteinTargets', d.proteinTargets);
+  if (d.maxTime != null) put('maxTime', clampInt(d.maxTime, 15, 120));
+  if (typeof d.exclusions === 'string') put('exclusions', d.exclusions);
+  if (isObj(d.cuisineTargets)) put('cuisineTargets', d.cuisineTargets);
+  if (Array.isArray(d.enabledCuisines)) put('enabledCuisines', d.enabledCuisines.filter(k => typeof k === 'string'));
+  if (d.suggestionCount != null) put('suggestionCount', clampInt(d.suggestionCount, 5, 30));
+  if (d.units === 'metric' || d.units === 'imperial') put('units', d.units);
+  if (isObj(d.shoppingLists)) put('shoppingLists', Object.fromEntries(Object.entries(d.shoppingLists)
+    .filter(([k]) => /^[0-3]$/.test(k)).map(([k, v]) => [k, normalizeShoppingList(v)]).filter(([, v]) => v)));
+  if (isObj(d.lastShoppingKeys)) put('lastShoppingKeys', d.lastShoppingKeys);
+  if (isObj(d.recipeCache)) put('recipeCache', Object.fromEntries(Object.entries(d.recipeCache)
+    .map(([k, v]) => [k, normalizeRecipe(v)]).filter(([, v]) => v)));
+  if (isObj(d.mealNotes)) put('mealNotes', Object.fromEntries(Object.entries(d.mealNotes).filter(([, v]) => typeof v === 'string')));
+  if (Array.isArray(d.mealHistory)) put('mealHistory', d.mealHistory.filter(n => typeof n === 'string').slice(-100));
+  if (Array.isArray(d.freezerItems)) put('freezerItems', d.freezerItems.map(normalizeFreezerItem).filter(Boolean));
+  if (Array.isArray(d.dislikedMeals)) put('dislikedMeals', d.dislikedMeals.filter(n => typeof n === 'string'));
+  return out;
+}
+// Stored data may predate validation or come from an old import: normalise on load
+function lsGetNorm(key, fallback) {
+  const v = normalizeData({ [key]: lsGet(key, fallback) })[key];
+  return v === undefined ? fallback : v;
+}
+// Freezer portions per dish planned in one week; stock is handed to earlier weeks first
+function freezerCoverage(plan, freezerItems, week, portions) {
+  const stock = {};
+  for (const f of freezerItems || []) {
+    if (!(f?.remaining > 0) || typeof f.name !== 'string') continue;
+    const k = f.name.toLowerCase();
+    stock[k] = (stock[k] || 0) + f.remaining;
+  }
+  let cover = {}, counts = {};
+  for (let w = 0; w <= week; w++) {
+    const c = {};
+    for (const m of plan?.[w] || []) if (m && !m.leftover) c[m.name] = (c[m.name] || 0) + 1;
+    const weekCover = {};
+    for (const [name, n] of Object.entries(c)) {
+      const k = name.toLowerCase(), need = n * portions, have = Math.min(stock[k] || 0, need);
+      if (have > 0) { stock[k] -= have; weekCover[name] = { have, need }; }
+    }
+    if (w === week) { cover = weekCover; counts = c; }
+  }
+  const names = Object.keys(counts);
+  return { cover, allFrozen: names.length > 0 && names.every(n => cover[n] && cover[n].have >= cover[n].need) };
+}
+
+// ── Dates ──────────────────────────────────────────────────────────────────
+// Local calendar date (YYYY-MM-DD); toISOString() gives the UTC date and shifts late-evening entries a day back
+function localDateString(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// Whole calendar days from a YYYY-MM-DD date until today, in local time
+function daysSince(dateStr, now = new Date()) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(y, m - 1, d)) / 86400000);
+}
+
+// ── Kassal ingredient matching ─────────────────────────────────────────────
+const KASSAL_SKIP = ["salt","vann","pepper","krydder","olje","smør","hvitløk","sukker","mel","saus","kraft"];
+const KASSAL_ADJECTIVES = ["tørket","tørkede","hermetiske","hermetisk","fersk","ferske","ferskpresset","hakket","hakkede",
+  "finhakket","finhakkede","malt","revet","skivet","kokt","kokte","rå","frossen","frosne","stor","store","liten","små",
+  "rød","røde","gul","gule","grønn","grønne","skrelt","moden","modne"];
+// Pantry staples are skipped as whole words or compound endings ("olivenolje", "hvetemel"), not as substrings ("melk")
+function kassalSkip(ing) {
+  return String(ing).toLowerCase().split(/[^a-zæøå]+/).some(w => w && KASSAL_SKIP.some(s => w === s || w.endsWith(s)));
+}
+// "3 gulrøtter" → "gulrøtter", "1 stor løk" → "løk": amounts and units are only stripped as whole words
+function kassalSearchWord(ing) {
+  const stripped = String(ing)
+    .replace(/^[\d.,/½¼¾\s-]+(?:(?:g|kg|dl|ml|cl|l|stk|ss|ts|pk|pakke|pakker|boks|bokser|glass|beger|pose|poser|skive|skiver|fedd|cm|neve|klype)(?=\s|$))?\s*/i, "")
+    .trim();
+  const words = stripped.split(/\s+/).map(w => w.replace(/[^a-zA-Z0-9æøåÆØÅéè]/g, "")).filter(Boolean);
+  return words.find(w => w.length >= 3 && !KASSAL_ADJECTIVES.includes(w.toLowerCase())) || null;
+}
+
+const DRIVE_KEYS = ['plan','weeks','portions','suggestions','proteinTargets','maxTime','exclusions',
+  'cuisineTargets','enabledCuisines','suggestionCount','units','shoppingLists','lastShoppingKeys',
+  'recipeCache','favourites','mealNotes','mealHistory','freezerItems','dislikedMeals'];
+// Fixed key order so local state and a downloaded backup hash identically
+const buildDrivePayload = src => Object.fromEntries(DRIVE_KEYS.map(k => [k, src?.[k] ?? null]));
+const isEmptyPayload = p => !(
+  (Array.isArray(p.plan) && p.plan.some(w => Array.isArray(w) && w.some(Boolean))) ||
+  p.suggestions?.length || p.freezerItems?.length || p.favourites?.length);
+function hashString(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36) + ':' + s.length;
+}
+// Three-way decision between this device, Drive, and the last version both agreed on (base)
+function decideSync(localHash, remoteHash, baseHash, localEmpty) {
+  if (localHash === remoteHash) return 'in-sync';
+  if (!baseHash) return localEmpty ? 'pull' : 'conflict';
+  if (remoteHash === baseHash) return 'push';
+  if (localHash === baseHash) return 'pull';
+  return 'conflict';
+}
+
 async function getValidAccessToken(clientId, clientSecret) {
   const t = lsGet('driveToken', null);
   if (!t) return null;
   if (Date.now() < t.expires_at - 60000) return t.access_token;
   if (!t.refresh_token || !clientId) return null;
+  let d;
   try {
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body: new URLSearchParams({ grant_type:'refresh_token', refresh_token:t.refresh_token, client_id:clientId, client_secret:clientSecret||'' })
     });
-    const d = await res.json();
-    if (d.access_token) {
-      const updated = { ...t, access_token:d.access_token, expires_at: Date.now()+(d.expires_in||3600)*1000 };
-      lsSet('driveToken', updated);
-      return d.access_token;
-    }
-    if (d.error === 'invalid_grant') {
-      lsSet('driveToken', null);
-      return 'TOKEN_EXPIRED';
-    }
-  } catch {}
-  lsSet('driveToken', null);
-  return null;
+    d = await res.json();
+  } catch {
+    return 'NETWORK'; // offline or non-JSON reply: keep the token and retry later
+  }
+  if (d.access_token) {
+    const updated = { ...t, access_token:d.access_token, expires_at: Date.now()+(d.expires_in||3600)*1000 };
+    lsSet('driveToken', updated);
+    return d.access_token;
+  }
+  if (d.error === 'invalid_grant' || d.error === 'invalid_client') {
+    lsSet('driveToken', null);
+    return 'TOKEN_EXPIRED';
+  }
+  return 'NETWORK'; // 5xx or unexpected reply: keep the token
 }
 
 // ── Main App ───────────────────────────────────────────────────────────────
@@ -220,17 +406,17 @@ function App() {
   const [kassalKey,    setKassalKey]    = useState(() => lsGet('kassalKey',''));
 
   // Planning state
-  const [weeks,       setWeeks]       = useState(() => lsGet('weeks', 1));
-  const [portions,    setPortions]    = useState(() => lsGet('portions', 4));
-  const [plan,        setPlan]        = useState(() => lsGet('plan', Array.from({length:4},()=>Array(7).fill(null))));
-  const [suggestions, setSuggestions] = useState(() => lsGet('suggestions', []));
+  const [weeks,       setWeeks]       = useState(() => lsGetNorm('weeks', 1));
+  const [portions,    setPortions]    = useState(() => lsGetNorm('portions', 4));
+  const [plan,        setPlan]        = useState(() => lsGetNorm('plan', Array.from({length:4},()=>Array(7).fill(null))));
+  const [suggestions, setSuggestions] = useState(() => lsGetNorm('suggestions', []));
   const [manualInput,   setManualInput]   = useState('');
   const [manualLoading, setManualLoading] = useState(false);
   const [manualError,   setManualError]   = useState(null);
   const [manualOptions, setManualOptions] = useState(null);
   const [collapsedCategories, setCollapsedCategories] = useState({});
-  const [favourites,  setFavourites]  = useState(() => lsGet('favourites', []));
-  const [freezerItems,setFreezerItems]= useState(() => lsGet('freezerItems', []));
+  const [favourites,  setFavourites]  = useState(() => lsGetNorm('favourites', []));
+  const [freezerItems,setFreezerItems]= useState(() => lsGetNorm('freezerItems', []));
   const [dislikedMeals,setDislikedMeals]=useState(() => lsGet('dislikedMeals', []));
   const [mealHistory, setMealHistory] = useState(() => lsGet('mealHistory', []));
   const [mealNotes,   setMealNotes]   = useState(() => lsGet('mealNotes', {}));
@@ -248,7 +434,7 @@ function App() {
   const VIEWS = ['plan','shopping','fryser','settings'];
   const [view,          setView]          = useState(() => { const h = window.location.hash.slice(1); return VIEWS.includes(h) ? h : 'plan'; });
   const [loading,       setLoading]       = useState(false);
-  const [shoppingLists, setShoppingLists] = useState(() => lsGet('shoppingLists', {}));
+  const [shoppingLists, setShoppingLists] = useState(() => lsGetNorm('shoppingLists', {}));
   const [shoppingWeek,  setShoppingWeek]  = useState(0);
   const [shoppingLoading,setShoppingLoading] = useState(false);
   const [error,         setError]         = useState(null);
@@ -258,8 +444,12 @@ function App() {
   const [dragSource,    setDragSource]    = useState(null);
   const [suggestionModal, setSuggestionModal] = useState(null);
   const [planModal,     setPlanModal]     = useState(null);
-  const [recipeCache,   setRecipeCache]   = useState(() => lsGet('recipeCache', {}));
+  const [recipeCache,   setRecipeCache]   = useState(() => lsGetNorm('recipeCache', {}));
   const [recipeLoading, setRecipeLoading] = useState(null);
+  const [recipeError,   setRecipeError]   = useState(null);   // { name, message } for the last failed recipe fetch
+  const [importPreview, setImportPreview] = useState(null);
+  const [hasImportBackup, setHasImportBackup] = useState(() => lsGet('preImportBackup', null) !== null);
+  const [confirmRemoveBatch, setConfirmRemoveBatch] = useState(null);
   const [filterProtein,   setFilterProtein]   = useState(null);
   const [filterCategory,  setFilterCategory]  = useState(null);
   const [showProtein,   setShowProtein]   = useState(false);
@@ -278,6 +468,8 @@ function App() {
   const [googleClientId,     setGoogleClientId]     = useState(() => lsGet('googleClientId', ''));
   const [googleClientSecret, setGoogleClientSecret] = useState(() => lsGet('googleClientSecret', ''));
   const [driveStatus,        setDriveStatus]        = useState('idle');
+  const [driveConflict,      setDriveConflict]      = useState(null);
+  const [tabStale,           setTabStale]           = useState(false);
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
   const [driveConnected, setDriveConnected] = useState(() => !!lsGet('driveToken', null));
   const [hadDriveConnection] = useState(() => !!lsGet('driveFileId', null));
@@ -290,20 +482,16 @@ function App() {
 
   const importRef = useRef(null);
   const driveSyncTimer = useRef(null);
+  const driveReadyRef = useRef(false);     // true once this tab has reconciled with Drive
+  const remoteModifiedRef = useRef(null);  // Drive modifiedTime this tab last saw
+  const syncChainRef = useRef(Promise.resolve());
+  const syncDriveRef = useRef(null);
+  const tabStaleRef = useRef(false);
+  const payloadRef = useRef(null);
+  const scaleRef = useRef({ portions: null, units: null });
 
-  // ── Browser back-button support ───────────────────────────────────────────
-  useEffect(() => {
-    history.replaceState({ view:'plan' }, '');
-  }, []);
-  useEffect(() => {
-    if (view !== 'plan') history.pushState({ view }, '');
-    else history.replaceState({ view:'plan' }, '');
-  }, [view]);
-  useEffect(() => {
-    const onPop = (e) => { setView(e.state?.view || 'plan'); };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  // Back/forward and deep links use the URL hash only (see the hash sync effect below). A separate
+  // pushState/popstate layer used to fight it: hash changes fire popstate with no state and reset the view.
 
   // ── OAuth callback — exchanges ?code= for Drive tokens on redirect back ──
   useEffect(() => {
@@ -365,10 +553,24 @@ function App() {
   useEffect(() => lsSet('googleClientSecret', googleClientSecret), [googleClientSecret]);
   useEffect(() => lsSet('driveSyncedAt',    driveSyncedAt),    [driveSyncedAt]);
 
+  // Keep week selectors in range when the number of weeks shrinks
+  useEffect(() => {
+    setMobileWeek(w => Math.min(w, weeks - 1));
+    setShoppingWeek(w => Math.min(w, weeks - 1));
+    setActiveCell(c => c && c.week >= weeks ? null : c);
+  }, [weeks]);
+
   // Sync note draft when modal opens
   useEffect(() => {
     if (planModal) setNotesDraft(mealNotes[planModal.meal.name] || '');
   }, [planModal?.meal?.name]);
+
+  // Save the note while typing, so a closed or discarded tab doesn't lose it
+  useEffect(() => {
+    if (!planModal) return;
+    const t = setTimeout(saveNote, 500);
+    return () => clearTimeout(t);
+  }, [notesDraft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync view <-> URL hash for deep linking and back/forward support
   useEffect(() => {
@@ -389,7 +591,7 @@ function App() {
       if (confirmClear) { setConfirmClear(false); return; }
       if (confirmClearCache) { setConfirmClearCache(false); return; }
       if (planModal) {
-        setMealNotes(prev => ({...prev, [planModal.meal.name]: notesDraft}));
+        saveNote();
         setPlanModal(null);
       }
     };
@@ -405,7 +607,7 @@ function App() {
   const totalSlots = weeks * 7;
 
   const activeFreezerItems = useMemo(() => freezerItems.filter(i => i.remaining > 0), [freezerItems]);
-  const showDriveBadge = !driveConnected && googleClientId && (driveStatus === 'expired' || hadDriveConnection);
+  const showDriveBadge = (driveConnected && (driveStatus === 'error' || driveStatus === 'conflict')) || (!driveConnected && googleClientId && (driveStatus === 'expired' || hadDriveConnection));
   const freezerRemainingTotal = useMemo(() => activeFreezerItems.reduce((s, i) => s + i.remaining, 0), [activeFreezerItems]);
   const hasDepleted = useMemo(() => freezerItems.some(i => i.remaining === 0), [freezerItems]);
 
@@ -472,8 +674,9 @@ function App() {
   const assignMeal = useCallback((meal, week, day) => {
     const existing = plan[week][day];
     setPlan(prev => { const next=prev.map(w=>[...w]); next[week][day]=meal; return next; });
-    if (!meal.leftover) setSuggestions(prev => {
-      let next = prev.filter(m=>m.name!==meal.name);
+    setSuggestions(prev => {
+      let next = meal.leftover ? prev : prev.filter(m=>m.name!==meal.name);
+      // A meal pushed out of its cell goes back to suggestions, whatever replaced it
       if (existing && !existing.leftover && !next.find(m=>m.name===existing.name)) next=[...next,existing];
       return next;
     });
@@ -484,19 +687,18 @@ function App() {
   const removeCell = useCallback((week, day) => {
     const meal = plan[week][day];
     setPlan(prev => { const next=prev.map(w=>[...w]); next[week][day]=null; return next; });
-    if (meal) setSuggestions(prev => prev.find(m=>m.name===meal.name) ? prev : [...prev, meal]);
+    if (meal && !meal.leftover) setSuggestions(prev => prev.find(m=>m.name===meal.name) ? prev : [...prev, meal]);
   }, [plan]);
 
   const clearPlan = () => {
     setPlan(Array.from({length:4},()=>Array(7).fill(null)));
-    setSuggestions([]);
     setShoppingLists({});
     setLastShoppingKeys({});
     setConfirmClear(false);
   };
 
   const addWeekToFreezer = (week) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateString();
     const meals = plan[week].filter(m => m && !m.leftover);
     if (!meals.length) return;
     setFreezerItems(prev => {
@@ -561,41 +763,37 @@ function App() {
   // ── Kassal prices ─────────────────────────────────────────────────────────
   const fetchKassalPrice = useCallback(async (ingredients) => {
     if (!kassalKey) return null;
-    const skip = ["salt","vann","pepper","krydder","olje","smør","hvitløk","sukker","mel","saus","kraft"];
-    const adjectives = ["tørket","hermetiske","hermetisk","fersk","ferskpresset","hakket","malt","revet","skivet","kokt","rå","frossen","frosne"];
-    const targets = ingredients.filter(i=>!skip.some(s=>i.toLowerCase().includes(s))).slice(0,4);
-    let total=0, found=0;
-    for (const ing of targets) {
-      const stripped = ing.replace(/^[\d.,\s]+(g|kg|dl|l|stk|ss|ts|pk|boks|bokser|pose|skive|skiver|fedd|cm)?\s*/i,"").trim();
-      if (!stripped || stripped.length<3) continue;
-      // Take the first non-adjective word, strip any special characters
-      const words = stripped.split(/\s+/).map(w => w.replace(/[^a-zA-Z0-9æøåÆØÅ]/g,""));
-      const mainWord = words.find(w => w.length>=3 && !adjectives.includes(w.toLowerCase())) || words.find(w=>w.length>=3);
-      if (!mainWord) continue;
+    const words = [...new Set(ingredients.filter(i => !kassalSkip(i)).map(kassalSearchWord).filter(Boolean))].slice(0, 4);
+    if (!words.length) return null;
+    const prices = await Promise.all(words.map(async (word) => {
       try {
-        const r = await fetch(`https://kassal.app/api/v1/products?search=${encodeURIComponent(mainWord)}&size=5`,
+        const r = await fetch(`https://kassal.app/api/v1/products?search=${encodeURIComponent(word)}&size=5`,
           { headers:{ Authorization:`Bearer ${kassalKey}` } });
         const d = await r.json();
-        const prices = (d?.data||[]).map(p=>p.current_price).filter(Boolean);
-        if (prices.length) { total+=Math.min(...prices); found++; }
-      } catch {}
-    }
-    if (found<1) return null;
-    const base = total/portions;
+        const found = (d?.data||[]).map(p=>p.current_price).filter(Boolean);
+        return found.length ? Math.min(...found) : null;
+      } catch { return null; }
+    }));
+    const matched = prices.filter(p => p != null);
+    // A single match says little about a whole recipe: keep the AI estimate instead
+    if (matched.length < Math.min(2, words.length)) return null;
+    const base = matched.reduce((sum, p) => sum + p, 0) / portions;
     return { low:Math.round(base*0.85), high:Math.round(base*1.2), source:"kassal" };
   }, [kassalKey, portions]);
 
   // ── Recipe fetch ──────────────────────────────────────────────────────────
   const fetchRecipe = useCallback(async (meal) => {
     if (recipeCache[meal.name] || !anthropicKey) return;
+    const scale = { portions, units };
     setRecipeLoading(meal.name);
+    setRecipeError(prev => (prev?.name === meal.name ? null : prev));
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers: anthropicHeaders,
         body: JSON.stringify({
-          model:"claude-sonnet-4-6",
-          max_tokens:2000,
+          model:"claude-sonnet-5", thinking:{type:"disabled"},
+          max_tokens:4000,
           system:"Du er en kokk-assistent. Bruk ALLTID norsk bokmål — aldri nynorsk eller dialektformer (f.eks. \"kokosmelk\" ikke \"kokosmjølk\", \"melk\" ikke \"mjølk\"). Bruk alltid de vanlige norske navnene på ingredienser slik de selges i norske dagligvarebutikker (f.eks. \"løk\" ikke \"kepaløk\", \"kokosmelk\" ikke \"kokosmilk\", \"kjøttdeig\" ikke \"kjøttfars\"). Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON. JSON-svaret MÅ alltid inkludere feltet \"portionWeightGrams\" med estimert totalvekt per porsjon i gram.",
           messages:[{
             role:"user",
@@ -607,24 +805,39 @@ function App() {
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(`API-feil ${res.status}: ${data?.error?.message || 'ukjent feil'}`);
+      if (data.stop_reason === 'max_tokens') throw new Error('Oppskriften ble for lang og ble avkortet. Prøv igjen.');
       const text = data.content?.find(b=>b.type==="text")?.text||"";
-      const parsed = parseMeals(text);
-      if (parsed) {
-        const flatIngredients = getIngredients(parsed);
-        if (kassalKey && flatIngredients?.length) {
-          const kp = await fetchKassalPrice(flatIngredients);
-          if (kp) parsed.pricePerPortion = kp;
-        }
-        setRecipeCache(prev => ({...prev, [meal.name]:parsed}));
+      const parsed = normalizeRecipe(parseMeals(text));
+      if (!parsed) throw new Error('Kunne ikke lese oppskriften fra svaret. Prøv igjen.');
+      const flatIngredients = getIngredients(parsed);
+      if (kassalKey && flatIngredients?.length) {
+        const kp = await fetchKassalPrice(flatIngredients);
+        if (kp) parsed.pricePerPortion = kp;
       }
-    } catch {}
-    setRecipeLoading(null);
+      // Portions or units changed while this was loading: the amounts are for the old scale
+      if (scaleRef.current.portions !== scale.portions || scaleRef.current.units !== scale.units) return false;
+      setRecipeCache(prev => ({...prev, [meal.name]:parsed}));
+      return true;
+    } catch (err) {
+      setRecipeError({ name: meal.name, message: err instanceof TypeError ? 'Nettverksfeil – sjekk tilkoblingen og prøv igjen.' : err.message });
+      return false;
+    } finally {
+      setRecipeLoading(null);
+    }
   }, [recipeCache, anthropicKey, kassalKey, fetchKassalPrice, portions, units]);
 
   const fetchAllRecipes = async () => {
     const meals = plan.slice(0,weeks).flat().filter(m => m && !m.leftover && !recipeCache[m.name]);
     const unique = [...new Map(meals.map(m=>[m.name,m])).values()];
-    for (const meal of unique) await fetchRecipe(meal);
+    const scale = { portions, units };
+    const failed = [];
+    for (const meal of unique) {
+      const ok = await fetchRecipe(meal);
+      if (scaleRef.current.portions !== scale.portions || scaleRef.current.units !== scale.units) return;
+      if (ok === false) failed.push(meal.name);
+    }
+    if (failed.length) setError(`Kunne ikke laste oppskrift for: ${failed.join(', ')}. Prøv igjen.`);
   };
 
   const toggleCard = (meal) => {
@@ -650,17 +863,20 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'x-api-key':anthropicKey,
           'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:600, messages:[{ role:'user', content:
+        body: JSON.stringify({ model:'claude-sonnet-5', thinking:{type:'disabled'}, max_tokens:1200, messages:[{ role:'user', content:
           `Svar alltid på norsk bokmål.\nBrukeren ønsker å legge til "${name}" i en batch-cook meal prep-app. Gi 3 ulike varianter av denne retten. Rettene skal egne seg til frysing og oppvarming. Ferdigkjøpte komponenter (som ferdig pizzabunn, tortillas eller kokosmelk på boks) er tillatt.${exclusionLine}\nSvar kun med dette JSON-formatet (ingen annen tekst):\n{"meals":[${mealSchema},${mealSchema},${mealSchema}]}\nbatchScore er 1–5: hvor godt retten egner seg til frysing og oppvarming (1=dårlig, f.eks. sushi; 5=perfekt, f.eks. gryter og supper).`
         }] })
       });
       const data = await res.json();
-      const text = data.content?.[0]?.text || '';
+      if (!res.ok) { setManualError(`API-feil ${res.status}: ${data?.error?.message || 'ukjent feil'}`); return; }
+      if (data.stop_reason === 'max_tokens') { setManualError('Svaret ble avkortet – prøv igjen.'); return; }
+      const text = data.content?.find(b=>b.type==="text")?.text || '';
       const match = text.match(/\{[\s\S]*\}/);
       let parsed;
       try { parsed = match ? JSON.parse(match[0]) : null; } catch { parsed = null; }
-      if (parsed?.meals?.length) {
-        setManualOptions(parsed.meals);
+      const options = Array.isArray(parsed?.meals) ? parsed.meals.map(normalizeMeal).filter(Boolean) : [];
+      if (options.length) {
+        setManualOptions(options);
       } else {
         setManualError('Kunne ikke hente alternativer – prøv igjen.');
       }
@@ -672,7 +888,7 @@ function App() {
   // ── Generate suggestions ──────────────────────────────────────────────────
   const generateSuggestions = useCallback(async () => {
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
-    setLoading(true); setError(null); setRetryFn(null); setSuggestions([]);
+    setLoading(true); setError(null); setRetryFn(null);
     const targets = PROTEINS.map(p=>`${p.label}: ca. ${proteinTargets[p.key]}x per uke`).join(", ");
     const cuisineGoals = allCuisines.filter(c=>(cuisineTargets[c.key]||0)>0)
       .map(c=>`${c.label}: ca. ${cuisineTargets[c.key]}x per uke`).join(", ");
@@ -687,7 +903,7 @@ function App() {
         method:"POST",
         headers: anthropicHeaders,
         body: JSON.stringify({
-          model:"claude-sonnet-4-6",
+          model:"claude-sonnet-5", thinking:{type:"disabled"},
           max_tokens: Math.max(3000, suggestionCount*weeks*220),
           system: SYSTEM_PROMPT,
           messages:[{
@@ -727,11 +943,12 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
       }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
-      if (parsed?.meals) setSuggestions(parsed.meals);
+      const meals = Array.isArray(parsed?.meals) ? parsed.meals.map(normalizeMeal).filter(Boolean) : [];
+      if (meals.length) setSuggestions(meals);
       else { setError(`Kunne ikke tolke svar. Rå respons: ${text.slice(0,200)}`); setRetryFn(() => generateSuggestions); }
     } catch (err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => generateSuggestions); }
     setLoading(false);
-  }, [anthropicKey, portions, proteinTargets, maxTime, exclusions, allCuisines, cuisineTargets, suggestionCount, plan, mealHistory]);
+  }, [anthropicKey, portions, weeks, proteinTargets, maxTime, exclusions, allCuisines, cuisineTargets, suggestionCount, plan, mealHistory, dislikedMeals]);
 
   // ── Re-roll single protein category ──────────────────────────────────────
   const [rerollLoading, setRerollLoading] = useState(null);
@@ -753,7 +970,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
         method:"POST",
         headers: anthropicHeaders,
         body: JSON.stringify({
-          model:"claude-sonnet-4-6", max_tokens:2000, system:SYSTEM_PROMPT,
+          model:"claude-sonnet-5", thinking:{type:"disabled"}, max_tokens:2000, system:SYSTEM_PROMPT,
           messages:[{ role:"user", content:`Svar alltid på norsk bokmål.\n\nForeslå 5 middager med protein "${p.label}" for en norsk familie. Hver rett lages i ${portions} porsjoner. Alle retter skal ha forberedelsestid på MAKS ${maxTime} minutter.${exclusionLine}${dislikedLine}${avoidLine}${historyLine}
 Familien bruker noen timer én dag i uken på å lage alt på én gang. ALT fryses ned i porsjoner – middagen er kun å ta frem en porsjon fra fryseren og varme opp. Ingen tilberedning ved servering. Foretrekk gryter, supper, sauser og ovnsretter. Gi god variasjon i kjøkken og tilberedningsmetode.
 Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn",\n      "emoji": "🍲",\n      "prepTime": "30 min",\n      "freezer": true,\n      "protein": "${proteinKey}",\n      "category": "gryte",\n      "tags": [],\n      "description": "Kort beskrivelse på 1 setning"\n    }\n  ]\n}\nMulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat", "wrap", "klassisk".` }]
@@ -764,12 +981,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
       if (parsed?.meals?.length) {
-        const fixed = parsed.meals.map(m => ({...m, protein: proteinKey}));
+        const fixed = parsed.meals.map(normalizeMeal).filter(Boolean).map(m => ({...m, protein: proteinKey}));
         setSuggestions(prev => [...prev.filter(s=>s.protein!==proteinKey), ...fixed]);
       } else { setError("Kunne ikke generere nye forslag."); setRetryFn(() => () => rerollProtein(proteinKey)); }
     } catch(err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => () => rerollProtein(proteinKey)); }
     setRerollLoading(null);
-  }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory]);
+  }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory, dislikedMeals]);
 
   // ── Shopping list ─────────────────────────────────────────────────────────
   const generateShoppingList = async (week, force=false) => {
@@ -782,18 +999,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     for (let d=0;d<7;d++) if (plan[week]?.[d] && !plan[week][d].leftover) plannedMeals.push(plan[week][d].name);
     if (!plannedMeals.length) { setError(`Ingen middager planlagt for uke ${week+1}.`); return; }
     const freezerNote = (() => {
-      const matches = freezerItems.filter(f =>
-        f.remaining > 0 &&
-        plannedMeals.some(m => m.toLowerCase() === f.name.toLowerCase())
-      );
-      if (!matches.length) return '';
-      const lines = matches.map(f => {
-        if (f.remaining >= portions) {
-          return `- ${f.name}: ${f.remaining} porsjoner i fryseren (nok til denne uken – ikke inkluder ingredienser)`;
-        }
-        const needed = portions - f.remaining;
-        return `- ${f.name}: ${f.remaining} porsjoner i fryseren, lag ${needed} nye porsjoner (skaler ingredienser til ${needed} porsjoner i stedet for ${portions})`;
-      });
+      const { cover } = freezerCoverage(plan, freezerItems, week, portions);
+      const lines = Object.entries(cover).map(([name, { have, need }]) => have >= need
+        ? `- ${name}: ${have} porsjoner i fryseren (nok til denne uken – ikke inkluder ingredienser)`
+        : `- ${name}: ${have} porsjoner i fryseren, lag ${need - have} nye porsjoner (skaler ingredienser til ${need - have} porsjoner i stedet for ${need})`);
+      if (!lines.length) return '';
       return `\n\nFølgende middager finnes allerede i fryseren:\n${lines.join('\n')}\nJuster handlelisten deretter.`;
     })();
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
@@ -817,8 +1027,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
         method:"POST",
         headers: anthropicHeaders,
         body: JSON.stringify({
-          model:"claude-sonnet-4-6",
-          max_tokens:6000,
+          model:"claude-sonnet-5", thinking:{type:"disabled"},
+          max_tokens:12000,
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
@@ -833,11 +1043,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       if (!res.ok) { setError(`API-feil ${res.status}: ${data?.error?.message||JSON.stringify(data)}`); setRetryFn(() => () => generateShoppingList(week, true)); setShoppingLoading(false); return; }
       const text = data.content?.find(b=>b.type==="text")?.text||"";
       const parsed = parseMeals(text);
-      if (parsed?.categories) {
-        setShoppingLists(prev=>({...prev,[week]:{...parsed, cachedMealsCount}}));
+      const list = data.stop_reason === 'max_tokens' ? null : normalizeShoppingList(parsed);
+      if (list) {
+        setShoppingLists(prev=>({...prev,[week]:{...list, cachedMealsCount}}));
         setLastShoppingKeys(prev=>({...prev,[week]:wKey}));
         setCheckedItems(prev=>{ const n={...prev}; delete n[week]; return n; });
-      } else { setError(`Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`); setRetryFn(() => () => generateShoppingList(week, true)); }
+      } else { setError(data.stop_reason === 'max_tokens' ? 'Handlelisten ble for lang og ble avkortet. Prøv igjen.' : `Kunne ikke tolke handleliste. Rå respons: ${text.slice(0,300)}`); setRetryFn(() => () => generateShoppingList(week, true)); }
     } catch (err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => () => generateShoppingList(week, true)); }
     setShoppingLoading(false);
   };
@@ -865,7 +1076,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     const data = { weeks, portions, plan, suggestions, proteinTargets, maxTime, exclusions,
       cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
       favourites, mealNotes, mealHistory, freezerItems, dislikedMeals, exportedAt: new Date().toISOString() };
-    const date = new Date().toISOString().split('T')[0];
+    const date = localDateString();
     downloadFile(JSON.stringify(data, null, 2), `middagsplan-${date}.json`, 'application/json');
   };
 
@@ -873,31 +1084,42 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        if (d.plan) setPlan(d.plan);
-        if (d.weeks) setWeeks(d.weeks);
-        if (d.portions) setPortions(d.portions);
-        if (d.suggestions) setSuggestions(d.suggestions);
-        if (d.proteinTargets) setProteinTargets(d.proteinTargets);
-        if (d.maxTime) setMaxTime(d.maxTime);
-        if (d.exclusions!==undefined) setExclusions(d.exclusions);
-        if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
-        if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
-        if (d.units) setUnits(d.units);
-        if (d.shoppingLists) setShoppingLists(d.shoppingLists);
-        if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
-        if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
-        if (d.favourites) setFavourites(d.favourites);
-        if (d.mealNotes) setMealNotes(d.mealNotes);
-        if (d.mealHistory) setMealHistory(d.mealHistory);
-        if (d.freezerItems) setFreezerItems(d.freezerItems);
-        if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
-        setError(null);
-      } catch { setError("Kunne ikke lese filen. Sjekk at det er en gyldig middagsplan-fil."); }
+      let raw;
+      try { raw = JSON.parse(ev.target.result); }
+      catch { setError("Kunne ikke lese filen. Sjekk at det er en gyldig middagsplan-fil."); return; }
+      const data = normalizeData(raw);
+      if (!data || !Object.keys(data).length) { setError("Filen inneholder ingen middagsplan-data."); return; }
+      setError(null);
+      setImportPreview({ data, fileName: file.name, exportedAt: typeof raw.exportedAt === 'string' ? raw.exportedAt : null });
     };
     reader.readAsText(file);
     e.target.value="";
+  };
+
+  // Cached recipe amounts are baked in for one portions/units setting
+  const applyImported = (data) => {
+    const scaleChanged = (data.portions && data.portions !== portions) || (data.units && data.units !== units);
+    applyDriveData(data);
+    if (scaleChanged && !data.recipeCache) {
+      setRecipeCache({});
+      setShoppingLists(data.shoppingLists || {});
+      setLastShoppingKeys(data.lastShoppingKeys || {});
+    }
+  };
+
+  const confirmImport = () => {
+    const { recipeCache: _omit, ...current } = buildDrivePayload(payloadRef.current);
+    lsSet('preImportBackup', { ...current, exportedAt: new Date().toISOString() });
+    setHasImportBackup(true);
+    applyImported(importPreview.data);
+    setImportPreview(null);
+  };
+
+  const undoImport = () => {
+    const backup = normalizeData(lsGet('preImportBackup', null));
+    if (backup) applyImported(backup);
+    localStorage.removeItem(PFX + 'preImportBackup');
+    setHasImportBackup(false);
   };
 
   const exportShoppingList = () => {
@@ -915,79 +1137,149 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   };
 
   // ── Google Drive sync ────────────────────────────────────────────────────
-  const saveToDrive = useCallback(async (data) => {
+  const applyDriveData = (d) => {
+    if (!d) return;
+    if (d.plan) setPlan(d.plan);
+    if (d.weeks) setWeeks(d.weeks);
+    if (d.portions) setPortions(d.portions);
+    if (d.suggestions) setSuggestions(d.suggestions);
+    if (d.proteinTargets) setProteinTargets(d.proteinTargets);
+    if (d.maxTime) setMaxTime(d.maxTime);
+    if (d.exclusions !== undefined) setExclusions(d.exclusions);
+    if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
+    if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
+    if (d.units) setUnits(d.units);
+    if (d.shoppingLists) setShoppingLists(d.shoppingLists);
+    if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
+    if (d.recipeCache) setRecipeCache(d.recipeCache);
+    if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
+    if (d.favourites) setFavourites(d.favourites);
+    if (d.mealNotes) setMealNotes(d.mealNotes);
+    if (d.mealHistory) setMealHistory(d.mealHistory);
+    if (d.freezerItems) setFreezerItems(d.freezerItems);
+    if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
+  };
+
+  // A 401 with a token we believed valid: force a refresh on the next attempt
+  const expireAccess = () => {
+    const t = lsGet('driveToken', null);
+    if (t) lsSet('driveToken', { ...t, expires_at: 0 });
+  };
+
+  // Reconciles this tab with the Drive backup. Never overwrites Drive with state that has
+  // not been compared against it, and never discards local edits Drive has not seen.
+  const doSync = useCallback(async ({ checkRemote = false, retried = false } = {}) => {
+    if (tabStaleRef.current || !payloadRef.current) return;
     const token = await getValidAccessToken(googleClientId, googleClientSecret);
     if (token === 'TOKEN_EXPIRED') { setDriveConnected(false); setDriveStatus('expired'); return; }
-    if (!token) return;
+    if (!token || token === 'NETWORK') { setDriveStatus('error'); return; }
+    const auth = { Authorization:`Bearer ${token}` };
+    const retry = () => { if (retried) setDriveStatus('error'); else syncDriveRef.current?.({ checkRemote, retried:true }); };
+
+    const local = buildDrivePayload(payloadRef.current);
+    const localHash = hashString(JSON.stringify(local));
+    const baseHash = lsGet('driveSyncedHash', '');
+    if (driveReadyRef.current && !checkRemote && localHash === baseHash) return;
     setDriveStatus('syncing');
-    const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
-    const fileId = lsGet('driveFileId', '');
-    try {
-      let res;
-      if (fileId) {
-        res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-          method:'PATCH', headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json' }, body:blob
-        });
-        if (res.status === 404) { lsSet('driveFileId', ''); setDriveStatus('error'); return; }
-      } else {
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify({ name:'reheat-and-eat-backup.json', mimeType:'application/json' })], { type:'application/json' }));
-        form.append('file', blob);
-        res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method:'POST', headers:{ Authorization:`Bearer ${token}` }, body:form
-        });
-        const d = await res.json();
-        if (d.id) lsSet('driveFileId', d.id);
+
+    let fileId = lsGet('driveFileId', '');
+    if (!fileId) {
+      const q = encodeURIComponent("name='reheat-and-eat-backup.json' and trashed=false");
+      const s = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime%20desc&spaces=drive&fields=files(id)`, { headers:auth });
+      if (s.status === 401) { expireAccess(); return retry(); }
+      if (!s.ok) { setDriveStatus('error'); return; }
+      fileId = (await s.json()).files?.[0]?.id || '';
+      if (fileId) lsSet('driveFileId', fileId);
+    }
+
+    let remoteModified = null;
+    if (fileId) {
+      const m = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime,trashed`, { headers:auth });
+      if (m.status === 401) { expireAccess(); return retry(); }
+      if (m.status === 404) { lsSet('driveFileId', ''); return retry(); }
+      if (!m.ok) { setDriveStatus('error'); return; }
+      const meta = await m.json();
+      if (meta.trashed) { lsSet('driveFileId', ''); return retry(); }
+      remoteModified = meta.modifiedTime;
+    }
+
+    if (fileId && remoteModified !== remoteModifiedRef.current) {
+      // Drive changed since this tab last saw it (or this tab has not loaded yet): download and decide
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers:auth });
+      if (r.status === 401) { expireAccess(); return retry(); }
+      if (!r.ok) { setDriveStatus('error'); return; }
+      const remote = await r.json();
+      const remoteHash = hashString(JSON.stringify(buildDrivePayload(remote)));
+      const action = decideSync(localHash, remoteHash, baseHash, isEmptyPayload(local));
+      if (action === 'conflict') {
+        driveReadyRef.current = false;
+        setDriveConflict({ remote, remoteHash, remoteModified });
+        setDriveStatus('conflict');
+        return;
       }
-      if (res.ok) {
+      remoteModifiedRef.current = remoteModified;
+      if (action !== 'push') {
+        if (action === 'pull') applyDriveData(normalizeData(remote));
+        lsSet('driveSyncedHash', remoteHash);
+        driveReadyRef.current = true;
+        lsSet('pendingDriveLoad', false);
         setDriveSyncedAt(new Date().toISOString());
         setDriveStatus('synced');
-      } else { setDriveStatus('error'); }
-    } catch { setDriveStatus('error'); }
+        return;
+      }
+    }
+
+    driveReadyRef.current = true;
+    lsSet('pendingDriveLoad', false);
+    if (fileId && localHash === baseHash) { setDriveStatus('synced'); return; }
+    if (!fileId && isEmptyPayload(local)) { setDriveStatus('idle'); return; }
+
+    const body = JSON.stringify({ ...local, savedAt: new Date().toISOString() });
+    let res;
+    if (fileId) {
+      res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,modifiedTime`, {
+        method:'PATCH', headers:{ ...auth, 'Content-Type':'application/json' }, body
+      });
+    } else {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name:'reheat-and-eat-backup.json', mimeType:'application/json' })], { type:'application/json' }));
+      form.append('file', new Blob([body], { type:'application/json' }));
+      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime', {
+        method:'POST', headers:auth, body:form
+      });
+    }
+    if (res.status === 401) { expireAccess(); return retry(); }
+    if (res.status === 404) { lsSet('driveFileId', ''); remoteModifiedRef.current = null; return retry(); }
+    if (!res.ok) { setDriveStatus('error'); return; }
+    const saved = await res.json();
+    if (saved.id) lsSet('driveFileId', saved.id);
+    remoteModifiedRef.current = saved.modifiedTime || null;
+    lsSet('driveSyncedHash', localHash);
+    setDriveSyncedAt(new Date().toISOString());
+    setDriveStatus('synced');
   }, [googleClientId, googleClientSecret]);
 
-  const loadFromDrive = useCallback(async () => {
-    const token = await getValidAccessToken(googleClientId, googleClientSecret);
-    if (token === 'TOKEN_EXPIRED') { setDriveConnected(false); setDriveStatus('expired'); return; }
-    if (!token) return;
-    setDriveStatus('syncing');
-    try {
-      let fileId = lsGet('driveFileId', '');
-      if (!fileId) {
-        const s = await fetch(`https://www.googleapis.com/drive/v3/files?q=name%3D'reheat-and-eat-backup.json'&spaces=drive&fields=files(id)`,
-          { headers:{ Authorization:`Bearer ${token}` } });
-        const sd = await s.json();
-        fileId = sd.files?.[0]?.id || '';
-        if (fileId) lsSet('driveFileId', fileId);
-      }
-      if (!fileId) { setDriveStatus('idle'); return; }
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        { headers:{ Authorization:`Bearer ${token}` } });
-      if (!res.ok) { setDriveStatus('error'); return; }
-      const d = await res.json();
-      if (d.plan) setPlan(d.plan);
-      if (d.weeks) setWeeks(d.weeks);
-      if (d.portions) setPortions(d.portions);
-      if (d.suggestions) setSuggestions(d.suggestions);
-      if (d.proteinTargets) setProteinTargets(d.proteinTargets);
-      if (d.maxTime) setMaxTime(d.maxTime);
-      if (d.exclusions !== undefined) setExclusions(d.exclusions);
-      if (d.cuisineTargets) setCuisineTargets(d.cuisineTargets);
-      if (d.enabledCuisines) setEnabledCuisines(d.enabledCuisines);
-      if (d.units) setUnits(d.units);
-      if (d.shoppingLists) setShoppingLists(d.shoppingLists);
-      if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
-      if (d.recipeCache) setRecipeCache(d.recipeCache);
-      if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
-      if (d.favourites) setFavourites(d.favourites);
-      if (d.mealNotes) setMealNotes(d.mealNotes);
-      if (d.mealHistory) setMealHistory(d.mealHistory);
-      if (d.freezerItems) setFreezerItems(d.freezerItems);
-      if (d.dislikedMeals) setDislikedMeals(d.dislikedMeals);
-      setDriveSyncedAt(new Date().toISOString());
-      setDriveStatus('synced');
-    } catch { setDriveStatus('error'); }
-  }, [googleClientId, googleClientSecret]);
+  // All Drive traffic runs one request chain at a time, so saves can't overlap or land out of order
+  const syncDrive = useCallback((opts) => {
+    syncChainRef.current = syncChainRef.current
+      .then(() => doSync(opts))
+      .catch(e => { console.error('Drive sync failed:', e); setDriveStatus('error'); });
+    return syncChainRef.current;
+  }, [doSync]);
+  syncDriveRef.current = syncDrive;
+
+  const resolveDriveConflict = (useRemote) => {
+    const c = driveConflict;
+    if (!c) return;
+    if (useRemote) applyDriveData(normalizeData(c.remote));
+    lsSet('driveSyncedHash', c.remoteHash);
+    remoteModifiedRef.current = c.remoteModified;
+    driveReadyRef.current = true;
+    lsSet('pendingDriveLoad', false);
+    setDriveConflict(null);
+    if (useRemote) { setDriveSyncedAt(new Date().toISOString()); setDriveStatus('synced'); }
+    else syncDrive();
+  };
 
   const connectGoogleDrive = useCallback(async () => {
     if (!googleClientId || !googleClientSecret) return;
@@ -1016,44 +1308,78 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     }
     localStorage.removeItem('mp_driveToken');
     localStorage.removeItem('mp_driveFileId');
+    lsSet('driveSyncedHash', '');
+    driveReadyRef.current = false;
+    remoteModifiedRef.current = null;
+    setDriveConflict(null);
     setDriveConnected(false);
     setDriveStatus('idle');
     setDriveSyncedAt(null);
   }, []);
 
-  // Load from Drive on startup if already connected
+  scaleRef.current = { portions, units };
+
+  // Latest Drive payload, readable from async sync code without stale closures
+  payloadRef.current = { plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions,
+    cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
+    recipeCache, favourites, mealNotes, mealHistory, freezerItems, dislikedMeals };
+
+  // Reconcile with Drive on startup if already connected
   useEffect(() => {
-    if (driveConnected) loadFromDrive();
+    if (driveConnected) syncDrive({ checkRemote:true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load after OAuth redirect (pendingDriveLoad flag avoids stale closure)
+  // Reconcile after OAuth redirect (pendingDriveLoad flag avoids stale closure)
   useEffect(() => {
-    if (driveConnected && lsGet('pendingDriveLoad', false)) {
-      lsSet('pendingDriveLoad', false);
-      loadFromDrive();
-    }
-  }, [driveConnected, loadFromDrive]);
+    if (driveConnected && lsGet('pendingDriveLoad', false)) syncDrive({ checkRemote:true });
+  }, [driveConnected, syncDrive]);
 
-  // Auto-save to Drive 2 s after any key state change
+  // Auto-save to Drive 2 s after any key state change, but only once this tab has reconciled
   useEffect(() => {
     if (!driveConnected) return;
     clearTimeout(driveSyncTimer.current);
-    driveSyncTimer.current = setTimeout(() => {
-      const hasMeals = plan.some(week => week.some(day => day !== null));
-      const hasAnyContent = hasMeals || suggestions.length > 0 || freezerItems.length > 0 || favourites.length > 0;
-      if (!hasAnyContent) return;
-      saveToDrive({ plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions,
-        cuisineTargets, enabledCuisines, suggestionCount, units, shoppingLists, lastShoppingKeys,
-        recipeCache, favourites, mealNotes, mealHistory, freezerItems, dislikedMeals });
-    }, 2000);
+    driveSyncTimer.current = setTimeout(() => { if (driveReadyRef.current) syncDrive(); }, 2000);
     return () => clearTimeout(driveSyncTimer.current);
-  }, [plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions, cuisineTargets, enabledCuisines, suggestionCount, units, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache, driveConnected]);
+  }, [plan, weeks, portions, suggestions, proteinTargets, maxTime, exclusions, cuisineTargets, enabledCuisines, suggestionCount, units, freezerItems, favourites, mealHistory, dislikedMeals, mealNotes, shoppingLists, lastShoppingKeys, recipeCache, driveConnected, syncDrive]);
+
+  // Retry when the network returns, check Drive when the app is shown again, flush when it is hidden
+  useEffect(() => {
+    if (!driveConnected) return;
+    let lastCheck = 0;
+    const check = () => {
+      if (Date.now() - lastCheck < 30000) return;
+      lastCheck = Date.now();
+      syncDrive({ checkRemote:true });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') check();
+      else if (driveReadyRef.current) { clearTimeout(driveSyncTimer.current); syncDrive(); }
+    };
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('online', check);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [driveConnected, syncDrive]);
+
+  // Another tab changed saved data: block this tab so it can't overwrite those changes
+  useEffect(() => {
+    const ignore = ['mp_driveToken', 'mp_driveSyncedAt', 'mp_driveSyncedHash', 'mp_driveFileId', 'mp_pendingDriveLoad'];
+    const onStorage = (e) => {
+      if (!e.key || !e.key.startsWith(PFX) || ignore.includes(e.key)) return;
+      tabStaleRef.current = true;
+      setTabStale(true);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const printPlan = () => {
     const rows = Array.from({length:weeks},(_,w) => {
       const cells = DAYS.map((d,di) => {
         const meal = plan[w][di];
-        return `<td>${meal ? meal.emoji+" "+meal.name : "<span class='empty'>—</span>"}</td>`;
+        return `<td>${meal ? esc(meal.emoji)+" "+esc(meal.name) : "<span class='empty'>—</span>"}</td>`;
       }).join("");
       return `<tr><td>Uke ${w+1}</td>${cells}</tr>`;
     }).join("");
@@ -1062,12 +1388,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       const sl = shoppingLists[w];
       if (!sl) return "";
       return `
-        <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${w+1} — ${portions} porsjoner per rett</h2>
-        ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${sl.totalPrice.low}–${sl.totalPrice.high} kr</p>` : ""}
+        <h2 style="margin:32px 0 12px;font-size:16px">🛒 Handleliste uke ${w+1} — ${Number(portions)||0} porsjoner per rett</h2>
+        ${sl.totalPrice ? `<p class="price">Estimert totalpris: ca. ${Number(sl.totalPrice.low)||0}–${Number(sl.totalPrice.high)||0} kr</p>` : ""}
         <div style="column-count:3;column-gap:24px">
           ${sl.categories.map(cat=>`<div class="cat-box" style="break-inside:avoid;margin-bottom:20px">
-            <div class="cat-title">${cat.emoji} ${cat.name}</div>
-            <ul>${cat.items.map(i=>`<li>${i.name}${i.amount ? ` — ${i.amount}` : ""}${i.items?.length ? `<ul style="margin:2px 0 4px;padding-left:14px">${i.items.map(s=>`<li style="color:#999;font-size:11px">${s.name}${s.amount ? ` — ${s.amount}` : ""}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>
+            <div class="cat-title">${esc(cat.emoji)} ${esc(cat.name)}</div>
+            <ul>${cat.items.map(i=>`<li>${esc(i.name)}${i.amount ? ` — ${esc(i.amount)}` : ""}${i.items?.length ? `<ul style="margin:2px 0 4px;padding-left:14px">${i.items.map(s=>`<li style="color:#999;font-size:11px">${esc(s.name)}${s.amount ? ` — ${esc(s.amount)}` : ""}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul>
           </div>`).join("")}
         </div>`;
     }).join("");
@@ -1092,7 +1418,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       </style>
       </head><body>
       <h1 style="font-size:20px;margin-bottom:4px">🧊 Reheat &amp; Eat</h1>
-      <p class="meta">Generert ${new Date().toLocaleDateString("nb-NO")} · ${portions} porsjoner per rett</p>
+      <p class="meta">Generert ${new Date().toLocaleDateString("nb-NO")} · ${Number(portions)||0} porsjoner per rett</p>
       <table>
         <thead><tr><th style="text-align:left"></th>
           ${DAYS.map(d=>`<th>${d}</th>`).join("")}
@@ -1112,7 +1438,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   // ── Notes ─────────────────────────────────────────────────────────────────
   const saveNote = () => {
     if (!planModal) return;
-    setMealNotes(prev => ({...prev, [planModal.meal.name]: notesDraft}));
+    const name = planModal.meal.name;
+    setMealNotes(prev => {
+      if ((prev[name] || '') === notesDraft) return prev;
+      const next = { ...prev };
+      if (notesDraft) next[name] = notesDraft; else delete next[name];
+      return next;
+    });
   };
 
   // ── Shared button styles ──────────────────────────────────────────────────
@@ -1137,6 +1469,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       ? { position:"fixed", inset:0, display:"flex", flexDirection:"column", background:"#0e0f11" }
       : { minHeight:"100vh", background:"#0e0f11", paddingBottom:60 }
     }>
+      <input ref={importRef} type="file" accept=".json" onChange={importPlan} style={{ display:"none" }} />
       <div style={isMobile ? { flex:1, overflowY:"auto", WebkitOverflowScrolling:"touch" } : {}}>
 
       {/* ── Header ── */}
@@ -1229,7 +1562,6 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 padding:"6px 12px", borderRadius:6, border:"1px solid #4a3a1a",
                 background:"transparent", color:"#c8a858", cursor:"pointer", fontSize:12, fontFamily:"sans-serif"
               }}>🖨 Skriv ut</button>
-              <input ref={importRef} type="file" accept=".json" onChange={importPlan} style={{ display:"none" }} />
             </div>
           </div>}
 
@@ -1389,7 +1721,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                   setPlan(prev=>{ const next=prev.map(r=>[...r]); next[w][d]=dragMeal; next[dragSource.week][dragSource.day]=existing??null; return next; });
                                 } else {
                                   setPlan(prev=>{ const next=prev.map(r=>[...r]); next[w][d]=dragMeal; return next; });
-                                  if (!dragMeal.leftover) setSuggestions(prev=>{ let next=prev.filter(m=>m.name!==dragMeal.name); if(existing&&!existing.leftover&&!next.find(m=>m.name===existing.name)) next=[...next,existing]; return next; });
+                                  setSuggestions(prev=>{ let next=dragMeal.leftover ? prev : prev.filter(m=>m.name!==dragMeal.name); if(existing&&!existing.leftover&&!next.find(m=>m.name===existing.name)) next=[...next,existing]; return next; });
                                   if (!dragMeal.leftover) addToHistory(dragMeal);
                                 }
                                 setDragMeal(null); setDragSource(null); setActiveCell(null);
@@ -1823,11 +2155,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             {shoppingLists[shoppingWeek] && !shoppingLoading && (() => {
               const sl = shoppingLists[shoppingWeek];
               const weekMeals = Array.from({length:7}, (_,d) => plan[shoppingWeek]?.[d]).filter(m => m && !m.leftover);
-              const frozenMeals = freezerItems.filter(f =>
-                f.remaining > 0 &&
-                weekMeals.some(m => m.name.toLowerCase() === f.name.toLowerCase())
-              );
-              const allFrozen = weekMeals.length > 0 && frozenMeals.length >= weekMeals.length;
+              const coverage = freezerCoverage(plan, freezerItems, shoppingWeek, portions);
+              const frozenMeals = Object.entries(coverage.cover).map(([name, c]) => ({ name, ...c }));
+              const allFrozen = coverage.allFrozen;
               const visibleCategories = allFrozen
                 ? sl.categories.filter(c => c.name !== 'Har du dette hjemme?')
                 : sl.categories;
@@ -1844,8 +2174,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       🧊 {allFrozen
                         ? "Alle måltidene ligger allerede i fryseren – ingen ingredienser er lagt til."
                         : frozenMeals.length === 1
-                          ? `${frozenMeals[0].name} ligger allerede i fryseren og er ${frozenMeals[0].remaining >= portions ? "ikke inkludert i listen" : "skalert ned"}.`
-                          : `${frozenMeals.length} av ${weekMeals.length} måltider ligger allerede i fryseren og er ikke inkludert i listen.`}
+                          ? `${frozenMeals[0].name} ligger allerede i fryseren og er ${frozenMeals[0].have >= frozenMeals[0].need ? "ikke inkludert i listen" : "skalert ned"}.`
+                          : `${frozenMeals.length} av ${new Set(weekMeals.map(m => m.name)).size} retter ligger allerede i fryseren og er trukket helt eller delvis fra listen.`}
                     </div>
                   )}
                   {estimatedMeals.length > 0 && (
@@ -2052,12 +2382,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     {driveStatus === 'syncing' && "↻ Synkroniserer…"}
                     {driveStatus === 'synced' && driveSyncedAt && `✓ Synkronisert ${new Date(driveSyncedAt).toLocaleTimeString("nb-NO",{hour:"2-digit",minute:"2-digit"})}`}
                     {driveStatus === 'error' && <span style={{ color:"#e87a38" }}>⚠ Synkroniseringsfeil</span>}
+                    {driveStatus === 'conflict' && <span style={{ color:"#e87a38" }}>⚠ Velg versjon</span>}
                     {driveStatus === 'idle' && "Venter på endringer…"}
                   </span>
-                  <button onClick={() => loadFromDrive()} style={{ padding:"5px 12px", borderRadius:6,
+                  <button onClick={() => syncDrive({ checkRemote:true })} style={{ padding:"5px 12px", borderRadius:6,
                     border:"1px solid #2a2b30", background:"transparent",
                     color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
-                    Last inn nå
+                    Synkroniser nå
                   </button>
                   <button onClick={disconnectGoogleDrive} style={{ padding:"5px 12px", borderRadius:6,
                     border:"1px solid #e87060", background:"#3a1a1a",
@@ -2268,6 +2599,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 <button onClick={()=>importRef.current?.click()} style={{ padding:"8px 16px", borderRadius:7,
                   border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                   cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>⬆ Importer plan (.json)</button>
+                {hasImportBackup && (
+                  <button onClick={undoImport} style={{ padding:"8px 16px", borderRadius:7,
+                    border:"1px solid #4a3a1a", background:"transparent", color:"#e8a838",
+                    cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>↶ Angre siste import</button>
+                )}
                 {shoppingLists[shoppingWeek] && (
                   <button onClick={exportShoppingList} style={{ padding:"8px 16px", borderRadius:7,
                     border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
@@ -2327,7 +2663,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     return groups;
                   }, {})
                 ).sort(([a],[b]) => b.localeCompare(a)).map(([date, items]) => {
-                    const ageDays  = Math.floor((Date.now() - new Date(date+'T12:00:00').getTime()) / 86400000);
+                    const ageDays  = daysSince(date);
                     const batchShelfLife = items.reduce((min, item) => {
                       const life = item.freezerLifeDays || FREEZER_LIFE_DEFAULTS[item.protein] || 90;
                       return Math.min(min, life);
@@ -2349,7 +2685,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           border:"1px solid #4a4420", borderRadius:6, padding:"1px 8px",
                           fontFamily:"sans-serif", fontWeight:600 }}>⏰ {batchShelfLife - ageDays} {(batchShelfLife - ageDays) === 1 ? "dag" : "dager"} igjen</span>}
                       </div>
-                      <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date))}
+                      <button onClick={()=>setConfirmRemoveBatch({ date, count: items.length })}
                         style={{ padding:"3px 10px", borderRadius:5, border:"1px solid #e87060",
                           background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                           fontSize:11, fontFamily:"sans-serif" }}>Fjern batch</button>
@@ -2429,6 +2765,139 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       </div>
 
       {/* ── CONFIRM CLEAR MODAL ── */}
+      {/* Drive conflict: this device and Drive both changed since they last matched */}
+      {driveConflict && (() => {
+        const count = d => ({
+          meals: (d.plan || []).flat().filter(Boolean).length,
+          freezer: (d.freezerItems || []).length,
+          notes: Object.values(d.mealNotes || {}).filter(Boolean).length,
+        });
+        const here = count(payloadRef.current || {}), there = count(normalizeData(driveConflict.remote) || {});
+        const savedAt = driveConflict.remote.savedAt
+          ? new Date(driveConflict.remote.savedAt).toLocaleString("nb-NO", { dateStyle:"short", timeStyle:"short" })
+          : "ukjent tidspunkt";
+        const column = (title, sub, c) => (
+          <div style={{ flex:"1 1 180px", background:"#141517", border:"1px solid #2a2b30", borderRadius:8, padding:"10px 12px" }}>
+            <div style={{ fontSize:13, color:"#e4ddd0", fontFamily:"sans-serif", fontWeight:600 }}>{title}</div>
+            <div style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif", margin:"2px 0 8px" }}>{sub}</div>
+            <div style={{ fontSize:12, color:"#b4b2c2", fontFamily:"sans-serif", lineHeight:1.7 }}>
+              {c.meals} middager i planen<br />{c.freezer} fryservarer<br />{c.notes} notater
+            </div>
+          </div>
+        );
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.78)", zIndex:400,
+            display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+            <div role="dialog" aria-modal="true" style={{ background:"#18191c", border:"1px solid #4a3a1a",
+              borderRadius:14, padding:24, maxWidth:520, width:"100%" }}>
+              <h3 style={{ margin:"0 0 8px", color:"#e8a838", fontSize:18 }}>Endringer både her og i Google Drive</h3>
+              <p style={{ margin:"0 0 14px", fontSize:13, color:"#b4b2c2", fontFamily:"sans-serif", lineHeight:1.5 }}>
+                Denne enheten har endringer som ikke er lagret i Drive, og Drive-kopien er endret fra en annen enhet siden sist. Velg hvilken versjon du vil beholde – den andre blir overskrevet.
+              </p>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:16 }}>
+                {column("Denne enheten", "Ikke synkronisert", here)}
+                {column("Google Drive", `Lagret ${savedAt}`, there)}
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
+                <button onClick={()=>resolveDriveConflict(true)} style={{ padding:"8px 16px", borderRadius:8,
+                  border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
+                  cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Bruk Drive-versjonen</button>
+                <button onClick={()=>resolveDriveConflict(false)} style={{ padding:"8px 16px", borderRadius:8,
+                  border:"none", background:"#e8a838", color:"#0e0f11",
+                  cursor:"pointer", fontSize:13, fontFamily:"sans-serif", fontWeight:700 }}>Behold denne enheten</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Another tab changed saved data */}
+      {tabStale && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:500,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div role="dialog" aria-modal="true" style={{ background:"#18191c", border:"1px solid #4a3a1a",
+            borderRadius:14, padding:24, maxWidth:420, width:"100%" }}>
+            <h3 style={{ margin:"0 0 8px", color:"#e8a838", fontSize:18 }}>Appen er endret i en annen fane</h3>
+            <p style={{ margin:"0 0 16px", fontSize:13, color:"#b4b2c2", fontFamily:"sans-serif", lineHeight:1.5 }}>
+              Last inn denne fanen på nytt, så endringene fra den andre fanen ikke blir overskrevet.
+            </p>
+            <button onClick={()=>window.location.reload()} style={{ padding:"8px 16px", borderRadius:8,
+              border:"none", background:"#e8a838", color:"#0e0f11", cursor:"pointer",
+              fontSize:13, fontFamily:"sans-serif", fontWeight:700 }}>Last inn på nytt</button>
+          </div>
+        </div>
+      )}
+
+      {/* Import preview: nothing is replaced until the user confirms */}
+      {importPreview && (() => {
+        const d = importPreview.data;
+        const rows = [
+          ['Middager i planen', d.plan ? d.plan.flat().filter(Boolean).length : null],
+          ['Forslag', d.suggestions?.length],
+          ['Fryservarer', d.freezerItems?.length],
+          ['Favoritter', d.favourites?.length],
+          ['Notater', d.mealNotes ? Object.values(d.mealNotes).filter(Boolean).length : null],
+        ].filter(([, n]) => n != null);
+        const when = importPreview.exportedAt && !isNaN(new Date(importPreview.exportedAt))
+          ? new Date(importPreview.exportedAt).toLocaleString("nb-NO", { dateStyle:"short", timeStyle:"short" }) : null;
+        return (
+          <div onClick={()=>setImportPreview(null)} style={{ position:"fixed", inset:0,
+            background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex",
+            alignItems:"center", justifyContent:"center", padding:16 }}>
+            <div role="dialog" aria-modal="true" onClick={e=>e.stopPropagation()} style={{ background:"#18191c",
+              border:"1px solid #2a2b30", borderRadius:14, padding:24, maxWidth:420, width:"100%" }}>
+              <h2 style={{ margin:"0 0 6px", fontSize:16, color:"#e4ddd0" }}>Importere middagsplan?</h2>
+              <p style={{ margin:"0 0 14px", fontSize:12, color:"#747280", fontFamily:"sans-serif", overflowWrap:"anywhere" }}>
+                {importPreview.fileName}{when ? ` · eksportert ${when}` : ""}
+              </p>
+              <div style={{ background:"#141517", border:"1px solid #22232a", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+                {rows.map(([label, n]) => (
+                  <div key={label} style={{ display:"flex", justifyContent:"space-between", fontSize:12,
+                    color:"#b4b2c2", fontFamily:"sans-serif", padding:"3px 0" }}>
+                    <span>{label}</span><span style={{ fontVariantNumeric:"tabular-nums" }}>{n}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin:"0 0 20px", fontSize:13, color:"#a8a6b6", fontFamily:"sans-serif", lineHeight:1.6 }}>
+                Dette erstatter disse dataene på denne enheten{driveConnected ? " og i Google Drive" : ""}. Nåværende data lagres først, så du kan angre fra Innstillinger.
+              </p>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                <button onClick={()=>setImportPreview(null)} style={{ padding:"8px 20px", borderRadius:8,
+                  border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
+                  cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Avbryt</button>
+                <button onClick={confirmImport} style={{ padding:"8px 20px", borderRadius:8, border:"none",
+                  background:"#e8a838", color:"#0e0f11", cursor:"pointer", fontSize:13,
+                  fontFamily:"sans-serif", fontWeight:700 }}>Importer</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {confirmRemoveBatch && (
+        <div onClick={()=>setConfirmRemoveBatch(null)} style={{ position:"fixed", inset:0,
+          background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex",
+          alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:"#18191c", border:"1px solid #3a2a2a",
+            borderRadius:14, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
+            <div style={{ fontSize:28, marginBottom:12 }}>🧊</div>
+            <h2 style={{ margin:"0 0 8px", fontSize:16, color:"#e4ddd0" }}>Fjerne hele batchen?</h2>
+            <p style={{ margin:"0 0 24px", fontSize:13, color:"#a8a6b6", fontFamily:"sans-serif", lineHeight:1.6 }}>
+              Dette fjerner {confirmRemoveBatch.count === 1 ? "1 rett" : `alle ${confirmRemoveBatch.count} retter`} laget {new Date(confirmRemoveBatch.date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long"})} fra fryseren, også porsjoner som ikke er spist.
+            </p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+              <button onClick={()=>setConfirmRemoveBatch(null)} style={{ padding:"8px 20px", borderRadius:8,
+                border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
+                cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Avbryt</button>
+              <button onClick={()=>{ const { date } = confirmRemoveBatch; setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date)); setConfirmRemoveBatch(null); }}
+                style={{ padding:"8px 20px", borderRadius:8, border:"none",
+                background:"#5a2020", color:"#f0c0c0", cursor:"pointer", fontSize:13,
+                fontFamily:"sans-serif", fontWeight:700 }}>Ja, fjern batch</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmClear && (
         <div onClick={()=>setConfirmClear(false)} style={{ position:"fixed", inset:0,
           background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex",
@@ -2569,11 +3038,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               const isLoadingRecipe = recipeLoading===suggestionModal.name;
               if (isLoadingRecipe) return <div style={{ fontSize:12, color:"#a8a6b6", fontFamily:"sans-serif", padding:"20px 0", textAlign:"center" }}>Laster oppskrift...</div>;
               if (!recipe) return (
-                <button onClick={()=>fetchRecipe(suggestionModal)} style={{ padding:"8px 18px",
-                  borderRadius:7, border:"1px solid #2a2b30", background:"transparent",
-                  color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
-                  Last inn oppskrift
-                </button>
+                <div>
+                  {recipeError?.name === suggestionModal.name && (
+                    <div style={{ fontSize:12, color:"#e87a38", fontFamily:"sans-serif", marginBottom:8 }}>⚠ {recipeError.message}</div>
+                  )}
+                  <button onClick={()=>fetchRecipe(suggestionModal)} style={{ padding:"8px 18px",
+                    borderRadius:7, border:"1px solid #2a2b30", background:"transparent",
+                    color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                    {recipeError?.name === suggestionModal.name ? "Prøv igjen" : "Last inn oppskrift"}
+                  </button>
+                </div>
               );
               return (
                 <>
@@ -2709,11 +3183,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 Laster oppskrift...
               </div>
             ) : !recipeCache[planModal.meal.name] ? (
-              <button onClick={()=>fetchRecipe(planModal.meal)} style={{ padding:"7px 16px", borderRadius:7,
-                border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
-                cursor:"pointer", fontSize:12, fontFamily:"sans-serif", marginBottom:16 }}>
-                Last inn oppskrift
-              </button>
+              <div style={{ marginBottom:16 }}>
+                {recipeError?.name === planModal.meal.name && (
+                  <div style={{ fontSize:12, color:"#e87a38", fontFamily:"sans-serif", marginBottom:8 }}>⚠ {recipeError.message}</div>
+                )}
+                <button onClick={()=>fetchRecipe(planModal.meal)} style={{ padding:"7px 16px", borderRadius:7,
+                  border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
+                  cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
+                  {recipeError?.name === planModal.meal.name ? "Prøv igjen" : "Last inn oppskrift"}
+                </button>
+              </div>
             ) : null}
             {!planModal.meal.leftover && recipeCache[planModal.meal.name] && (() => {
               const recipe = recipeCache[planModal.meal.name];
@@ -2874,7 +3353,48 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+// Last line of defence: a render crash shows a recovery screen instead of a blank page
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('Reheat & Eat crashed:', error, info && info.componentStack); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const exportData = () => {
+      const data = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k.startsWith(PFX) || /(Key|Token|Secret|ClientId)$/.test(k)) continue;
+        try { data[k.slice(PFX.length)] = JSON.parse(localStorage.getItem(k)); } catch {}
+      }
+      downloadFile(JSON.stringify(data, null, 2), `middagsplan-nodeksport-${localDateString()}.json`, 'application/json');
+    };
+    const btn = { padding:"8px 16px", borderRadius:8, border:"1px solid #2a2b30", background:"transparent",
+      color:"#b4b2c2", cursor:"pointer", fontSize:13, fontFamily:"sans-serif" };
+    return (
+      <div style={{ minHeight:"100vh", background:"#0e0f11", color:"#e4ddd0", display:"flex",
+        alignItems:"center", justifyContent:"center", padding:16, fontFamily:"Georgia, 'Times New Roman', serif" }}>
+        <div role="alert" style={{ maxWidth:460, width:"100%", background:"#18191c", border:"1px solid #3a2a2a", borderRadius:14, padding:24 }}>
+          <h2 style={{ margin:"0 0 8px", fontSize:18, color:"#e8a838" }}>Noe gikk galt</h2>
+          <p style={{ margin:"0 0 12px", fontSize:13, color:"#b4b2c2", fontFamily:"sans-serif", lineHeight:1.6 }}>
+            Siden kunne ikke vises, trolig på grunn av uventede data. Ingenting er slettet. Gå til planen, eller last ned en kopi av dataene først.
+          </p>
+          <pre style={{ margin:"0 0 16px", fontSize:11, color:"#747280", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+            {String((this.state.error && this.state.error.message) || this.state.error)}
+          </pre>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            <button onClick={() => { window.location.hash = 'plan'; window.location.reload(); }}
+              style={{ ...btn, border:"none", background:"#e8a838", color:"#0e0f11", fontWeight:700 }}>Gå til planen</button>
+            <button onClick={exportData} style={btn}>Last ned data (.json)</button>
+            <button onClick={() => this.setState({ error: null })} style={btn}>Prøv igjen</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
 </script>
 </body>
 </html>
