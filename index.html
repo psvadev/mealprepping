@@ -133,6 +133,85 @@ function recipesAtScale(cache, scale) {
   return out;
 }
 
+// ── Exclusion check ──────────────────────────────────────────────────────────
+// The prompts tell the AI to avoid the exclusions, but nothing verified that it did. This
+// re-checks its output in the browser. It warns rather than filters: a false alarm costs a
+// glance, a miss can cost far more. Values are stems, matched as substrings.
+const EXCLUSION_SYNONYMS = {
+  gluten:    ['hvete', 'rug', 'bygg', 'spelt', 'couscous', 'bulgur', 'semule', 'pasta', 'spagetti', 'spaghetti', 'lasagne', 'brød', 'panko', 'tortilla', 'nudl'],
+  hvete:     ['couscous', 'bulgur', 'semule', 'pasta', 'spagetti', 'spaghetti', 'lasagne', 'brød', 'panko', 'tortilla'],
+  skalldyr:  ['reke', 'krabbe', 'hummer', 'kreps', 'scampi', 'languster'],
+  bløtdyr:   ['skjell', 'østers', 'blekksprut', 'akkar', 'snegl'],
+  nøtt:      ['mandel', 'mandl', 'cashew', 'pekan', 'pistasj', 'makadamia', 'hasselnøtt', 'valnøtt', 'paranøtt'],
+  peanøtt:   ['jordnøtt'],
+  melk:      ['fløte', 'smør', 'ost', 'rømme', 'yoghurt', 'kesam', 'kvarg', 'crème fraîche', 'creme fraiche', 'parmesan', 'mozzarella', 'mascarpone', 'ricotta'],
+  laktos:    ['melk', 'fløte', 'smør', 'ost', 'rømme', 'yoghurt', 'kesam', 'kvarg', 'crème fraîche', 'creme fraiche', 'parmesan', 'mozzarella', 'mascarpone', 'ricotta'],
+  egg:       ['majones'],
+  fisk:      ['laks', 'torsk', 'sei', 'hyse', 'makrell', 'tunfisk', 'sild', 'ansjos', 'ørret', 'kveite', 'steinbit', 'fiskesaus'],
+  soya:      ['tofu', 'edamame', 'miso', 'tempeh'],
+  sesam:     ['tahini'],
+};
+// Words that contain a stem but aren't the allergen — removed before matching that term only
+// (so "mandelmelk" is still a nut hit even though it's not a dairy one)
+const DAIRY_FREE = ['kokosmelk', 'kokosfløte', 'kokosyoghurt', 'havremelk', 'havrefløte', 'havreyoghurt',
+  'rismelk', 'soyamelk', 'soyayoghurt', 'mandelmelk', 'peanøttsmør', 'kakaosmør', 'sheasmør'];
+const GLUTEN_FREE = ['bokhvete', 'risnudl', 'glassnudl', 'maistortilla', 'risbrød'];
+const EXCLUSION_FALSE_FRIENDS = {
+  melk: DAIRY_FREE, laktos: DAIRY_FREE,
+  nøtt: ['muskatnøtt', 'kokosnøtt'],
+  gluten: GLUTEN_FREE, hvete: GLUTEN_FREE,
+};
+const EXCL_LETTERS = 'a-zæøåäöüéè';
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// "nøtter" → "nøtt" so "valnøtt" and "cashewnøtter" match; never cut below four letters
+const exclusionStem = t => (t.match(/^(.{4,}?)(ene|er|en|e|r)$/) || [, t])[1];
+function exclusionTerms(text) {
+  if (typeof text !== 'string') return [];
+  const terms = text.toLowerCase().split(/[,;\n\/]|\s+og\s+|\s+eller\s+/)
+    .map(t => t.trim().replace(/^(ingen|uten|ikke)\s+/, '').replace(/[.!]+$/, ''))
+    .filter(t => t.length >= 3);
+  return [...new Set(terms)].map(term => {
+    const stem = exclusionStem(term);
+    return { term,
+      stems: [...new Set([stem, ...(EXCLUSION_SYNONYMS[stem] || EXCLUSION_SYNONYMS[term] || [])])],
+      friends: EXCLUSION_FALSE_FRIENDS[stem] || EXCLUSION_FALSE_FRIENDS[term] || [] };
+  });
+}
+// Returns the user's own exclusion terms that appear in `text`. Stems of three letters or fewer
+// only match at the start of a word ("egg" must not hit "lammelegg"), and "-fri" products are
+// skipped ("laktosefri melk" is exactly what a lactose-free household wants).
+const EXCL_FREE = `[${EXCL_LETTERS}]{0,3}-?fri(?:tt|e)?(?![${EXCL_LETTERS}])`;
+function findExclusions(text, terms) {
+  if (!text || !terms?.length) return [];
+  const s = String(text).toLowerCase();
+  return terms.filter(({ stems, friends }) => {
+    // The line declares itself free of this term ("glutenfri pasta"): its synonyms don't count either
+    if (new RegExp(escapeRe(stems[0]) + EXCL_FREE).test(s)) return false;
+    const t = friends.reduce((acc, w) => acc.split(w).join(' '), s);
+    return stems.some(stem => {
+      const re = new RegExp((stem.length <= 3 ? `(?:^|[^${EXCL_LETTERS}])` : '') + escapeRe(stem), 'g');
+      for (let m; (m = re.exec(t)); ) {
+        if (!new RegExp('^' + EXCL_FREE).test(t.slice(m.index + m[0].length))) return true;   // "melkefri" ≠ melk
+      }
+      return false;
+    });
+  }).map(t => t.term);
+}
+function ExclusionFlag({ hits }) {
+  if (!hits?.length) return null;
+  return <span title={`Du har ekskludert: ${hits.join(', ')}`} style={{ color:"#e87070", fontWeight:700,
+    marginLeft:6, whiteSpace:"nowrap", fontFamily:"sans-serif", fontSize:"0.9em" }}>⚠ {hits.join(', ')}</span>;
+}
+function ExclusionBanner({ hits, what }) {
+  if (!hits?.length) return null;
+  return (
+    <div role="alert" style={{ background:"#2a1a1a", border:"1px solid #6a3a3a", borderRadius:8,
+      padding:"9px 12px", marginBottom:12, fontSize:12, color:"#e8a0a0", fontFamily:"sans-serif", lineHeight:1.5 }}>
+      ⚠ {what} inneholder kanskje noe du har ekskludert: <b>{hits.join(', ')}</b>. Sjekk ingrediensene før du handler.
+    </div>
+  );
+}
+
 // ── Utilities ──────────────────────────────────────────────────────────────
 function parseMeals(text) {
   try {
@@ -478,6 +557,9 @@ function App() {
   const [recipeCache,   setRecipeCache]   = useState(() => tagRecipeScale(lsGetNorm('recipeCache', {}), scaleKey(portions, units)));
   // Every read goes through this view: only recipes fetched at the current portions/units
   const recipes = useMemo(() => recipesAtScale(recipeCache, scaleKey(portions, units)), [recipeCache, portions, units]);
+  const exclusionList = useMemo(() => exclusionTerms(exclusions), [exclusions]);
+  const excludedIn = (text) => findExclusions(text, exclusionList);
+  const recipeExclusions = (name, recipe) => [...new Set([name, ...getIngredients(recipe)].flatMap(excludedIn))];
   const [recipeLoading, setRecipeLoading] = useState(null);
   const [recipeError,   setRecipeError]   = useState(null);   // { name, message } for the last failed recipe fetch
   const [importPreview, setImportPreview] = useState(null);
@@ -2168,6 +2250,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
                         <ProteinBadge protein={meal.protein} />
                         <CategoryBadge category={meal.category} />
+                        <ExclusionFlag hits={excludedIn(`${meal.name} ${meal.description || ''}`)} />
                       </div>
                       {meal.batchScore && (
                         <div style={{ marginTop:6, fontSize:10, letterSpacing:1,
@@ -2267,8 +2350,10 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 return getIngredients(cached).length === 0;
               });
               const isStale = lastShoppingKeys[shoppingWeek] !== weekPlanKey(shoppingWeek);
+              const listHits = [...new Set(sl.categories.flatMap(c => c.items.flatMap(it => excludedIn(it.name))))];
               return (
                 <>
+                  <ExclusionBanner hits={listHits} what="Handlelisten" />
                   {isStale && (
                     <div style={{ background:"#1c1a12", border:"1px solid #3a3015", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, fontSize:12, color:"#c8a84a", fontFamily:"sans-serif",
@@ -2348,7 +2433,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
                                 <span style={{ fontSize:12, color: checked ? "#747280" : "#d4cdc4", fontFamily:"sans-serif",
                                   fontWeight: item.items?.length ? 600 : 400,
-                                  textDecoration: checked ? "line-through" : "none" }}>{item.name}</span>
+                                  textDecoration: checked ? "line-through" : "none" }}>{item.name}<ExclusionFlag hits={excludedIn(item.name)} /></span>
                                 <span style={{ fontSize:11, color: checked ? "#747280" : "#b8b0a8", fontFamily:"sans-serif",
                                   marginLeft:8, flexShrink:0, whiteSpace:"nowrap", textDecoration: checked ? "line-through" : "none" }}>{item.amount}</span>
                               </div>
@@ -3172,6 +3257,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               );
               return (
                 <>
+                  <ExclusionBanner hits={recipeExclusions(suggestionModal.name, recipe)} what="Oppskriften" />
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:14 }}>
                     <div>
                       <div style={{ fontSize:10, color:"#a8a6b6", fontFamily:"sans-serif",
@@ -3186,7 +3272,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                             {comp.ingredients?.map((ing,j) => (
                               <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
                                 padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
-                                <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                                <span style={{ color:"#b4b2c2" }}>•</span><span>{ing}<ExclusionFlag hits={excludedIn(ing)} /></span>
                               </li>
                             ))}
                           </ul>
@@ -3196,7 +3282,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           {recipe.ingredients?.map((ing,j) => (
                             <li key={j} style={{ fontSize:11, color:"#c8c0b4", fontFamily:"sans-serif",
                               padding:"3px 0", borderBottom:"1px solid #141517", display:"flex", gap:6 }}>
-                              <span style={{ color:"#b4b2c2" }}>•</span>{ing}
+                              <span style={{ color:"#b4b2c2" }}>•</span><span>{ing}<ExclusionFlag hits={excludedIn(ing)} /></span>
                             </li>
                           ))}
                         </ul>
@@ -3319,6 +3405,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               const recipe = recipes[planModal.meal.name];
               return (
                 <div>
+                  <ExclusionBanner hits={recipeExclusions(planModal.meal.name, recipe)} what="Oppskriften" />
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:18 }}>
                     <div>
                       <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
@@ -3333,7 +3420,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                             {comp.ingredients?.map((ing,j) => (
                               <li key={j} style={{ fontSize:13, color:"#d4cdc4", fontFamily:"sans-serif",
                                 padding:"5px 0", borderBottom:"1px solid #22232a", display:"flex", gap:8 }}>
-                                <span style={{ color:"#e8a838", marginTop:2 }}>•</span>{ing}
+                                <span style={{ color:"#e8a838", marginTop:2 }}>•</span><span>{ing}<ExclusionFlag hits={excludedIn(ing)} /></span>
                               </li>
                             ))}
                           </ul>
@@ -3343,7 +3430,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                           {recipe.ingredients?.map((ing,j) => (
                             <li key={j} style={{ fontSize:13, color:"#d4cdc4", fontFamily:"sans-serif",
                               padding:"5px 0", borderBottom:"1px solid #22232a", display:"flex", gap:8 }}>
-                              <span style={{ color:"#e8a838", marginTop:2 }}>•</span>{ing}
+                              <span style={{ color:"#e8a838", marginTop:2 }}>•</span><span>{ing}<ExclusionFlag hits={excludedIn(ing)} /></span>
                             </li>
                           ))}
                         </ul>

@@ -192,7 +192,16 @@ Imported files, Drive backups, stored localStorage data and AI replies are treat
 - `normalizeMeal`, `normalizeShoppingList` (every category gets an `items` array, amounts become strings) and `normalizeRecipe` (numeric nutrition and minutes, array `tips`/`steps`) are also applied to AI replies.
 - `ErrorBoundary` wraps `<App />`: a render crash shows "Noe gikk galt" with "Gå til planen", "Last ned data (.json)" (all `mp_` data except keys and tokens) and "Prøv igjen", instead of a blank page.
 
-These helpers, plus `esc()`, `hashString`, `decideSync`, `freezerCoverage`, `kassalSkip`, `kassalSearchWord`, `localDateString`, `daysSince`, `pruneRecipeCache`, `scaleKey`, `tagRecipeScale` and `recipesAtScale`, are top-level so Playwright tests can call them through `page.evaluate`.
+These helpers, plus `esc()`, `hashString`, `decideSync`, `freezerCoverage`, `kassalSkip`, `kassalSearchWord`, `localDateString`, `daysSince`, `pruneRecipeCache`, `scaleKey`, `tagRecipeScale`, `recipesAtScale`, `exclusionTerms` and `findExclusions`, are top-level so Playwright tests can call them through `page.evaluate`.
+
+### Exclusion check
+
+The prompts tell the AI to avoid `mp_exclusions`, but nothing verified that it did — and this is a family with allergies. `exclusionTerms(text)` parses the free text (splits on `, ; / og eller`, drops `ingen`/`uten`/`ikke`), and `findExclusions(text, terms)` returns the user's own terms found in a piece of AI output. It **warns, never filters**: a false alarm costs a glance, a miss can cost far more.
+
+- **Where:** red `⚠ term` flags (`ExclusionFlag`) on recipe ingredient lines, shopping list items and suggestion cards, plus an `ExclusionBanner` above a flagged recipe or shopping list.
+- **Matching:** stems, as substrings, so Norwegian compounds match ("nøtter" → `nøtt` hits "cashewnøtter"). `EXCLUSION_SYNONYMS` maps the common EU allergens to Norwegian ingredient names (gluten → hvete, pasta, brød…; skalldyr → reke, krabbe…; laktose → melk, smør, ost…).
+- **False-positive guards:** stems of three letters or fewer match only at a word start ("egg" ≠ "lammelegg", "ost" ≠ "frost"); a line that declares itself free of the term is exempt ("glutenfri pasta", "laktosefri melk"); `EXCLUSION_FALSE_FRIENDS` removes look-alikes for one term only (kokosmelk isn't dairy, but mandelmelk is still a nut).
+- **Limits:** it only sees named ingredients. A hidden source (gluten in a stock cube, celery in buljong) is invisible to it — the banner says *kanskje* for that reason. Extend the synonym and false-friend tables rather than loosening the matcher; every case is pinned in `test_phase7.py`.
 
 ### Storage limits
 
@@ -260,7 +269,7 @@ Sections (in display order):
 1. **API-nøkler** — Anthropic (required) and Kassal (optional). Password inputs with "Fjern" clear buttons, stored immediately in localStorage on change. Never included in plan exports.
 2. **Google Drive Sync** — Client ID + Client Secret inputs (disabled when connected). "Koble til Google Drive" button; when connected shows sync status (syncing / synced / error / idle), "Synkroniser nå" button, and "Koble fra" disconnect button. Amber warning when token has expired (`driveStatus === 'expired'`), prompting reconnection. An amber badge also appears on the settings nav entry point (desktop pill, mobile dot) when Drive is disconnected — visible from any view so the user notices before going to the store with a stale list.
 3. **Standardverdier** — weeks (1–4), portions (1–20 via Stepper), suggestion count (5–30 step 5), max prep time slider (15–120 min step 15), and measurement units (Metrisk / Imperialt toggle). Neither setting clears the recipe cache: recipes are scale-tagged and the `recipes` view hides non-matching ones, so a misclick on the stepper and back costs nothing. Changing portions leaves shopping lists in place too — `weekPlanKey` includes portions, so they turn stale (banner, check-offs kept) and un-stale on the way back. Switching units clears `mp_shoppingLists`, because lists don't record their units.
-4. **Allergener og ekskluderinger** — free-text input for ingredients/allergens the AI should always avoid. "× Fjern alle" clear button shown when non-empty. Value is `mp_exclusions`, injected into all three AI prompts.
+4. **Allergener og ekskluderinger** — free-text input for ingredients/allergens the AI should always avoid. "× Fjern alle" clear button shown when non-empty. Value is `mp_exclusions`, injected into all three AI prompts, and also checked against the AI's output in the browser (see *Exclusion check*).
 5. **Favoritter** — all starred meals shown as chips with per-item ✕ removal and a "Tøm alle" button. Empty state prompts to use ★ on a suggestion or in the plan.
 6. **Liker ikke** — list of disliked meal names with per-item ✕ removal and a "Tøm liste" button. Empty state explains how to add entries (via 👎 in Fryser view).
 7. **Mathistorikk** — scrollable wrapped list of recent meals as chips, with count and "Tøm historikk" button. Empty state explains meals are added automatically when assigned to the plan.
