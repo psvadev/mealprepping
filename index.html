@@ -723,6 +723,15 @@ function App() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+  // Any view change closes the modals — including browser Back/Forward, which the mobile nav
+  // handler never sees. The note is saved first.
+  const prevViewRef = useRef(view);
+  useEffect(() => {
+    if (prevViewRef.current === view) return;
+    prevViewRef.current = view;
+    if (planModal) { saveNote(); setPlanModal(null); }
+    setSuggestionModal(null);
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close modal on Escape
   useEffect(() => {
@@ -810,9 +819,24 @@ function App() {
     return true;
   }), [suggestions, filterProtein, filterCategory, maxTime]);
 
+  // ── Undo toast ────────────────────────────────────────────────────────────
+  // One-click deletes offer "Angre" for 6 s. Restores merge back rather than overwrite,
+  // so anything changed in those seconds survives the undo.
+  const [undoToast, setUndoToast] = useState(null);   // { message, restore }
+  const undoTimer = useRef(null);
+  const offerUndo = (message, restore) => {
+    clearTimeout(undoTimer.current);
+    setUndoToast({ message, restore });
+    undoTimer.current = setTimeout(() => setUndoToast(null), 6000);
+  };
+  useEffect(() => () => clearTimeout(undoTimer.current), []);
+  const restoreInto = (removed, key = x => x) => cur => [...removed.filter(r => !cur.some(c => key(c) === key(r))), ...cur];
+
   // ── Meal history ─────────────────────────────────────────────────────────
+  // A re-used dish moves to the end, so "the last 30" sent to the AI really are the most recent
   const addToHistory = useCallback((meal) => {
-    setMealHistory(prev => prev.includes(meal.name) ? prev : [...prev, meal.name].slice(-100));
+    setMealHistory(prev => prev[prev.length - 1] === meal.name ? prev
+      : [...prev.filter(n => n !== meal.name), meal.name].slice(-100));
   }, []);
 
   // ── Meal assignment ───────────────────────────────────────────────────────
@@ -829,8 +853,10 @@ function App() {
     setActiveCell(null);
   }, [plan, addToHistory]);
 
-  const removeCell = useCallback((week, day) => {
+  const removeCell = useCallback((week, day, expected) => {
     const meal = plan[week][day];
+    // The modal holds the dish it opened with; a Drive pull may have put another one in the cell since
+    if (!meal || (expected && meal.name !== expected.name)) return;
     setPlan(prev => { const next=prev.map(w=>[...w]); next[week][day]=null; return next; });
     if (meal && !meal.leftover) setSuggestions(prev => prev.find(m=>m.name===meal.name) ? prev : [...prev, meal]);
   }, [plan]);
@@ -839,6 +865,7 @@ function App() {
     setPlan(Array.from({length:4},()=>Array(7).fill(null)));
     setShoppingLists({});
     setLastShoppingKeys({});
+    setCheckedItems({});
     setConfirmClear(false);
   };
 
@@ -846,6 +873,23 @@ function App() {
     const today = localDateString();
     const meals = plan[week].filter(m => m && !m.leftover);
     if (!meals.length) return;
+    // A second tap the same day merges into the existing entries and doubles the portions.
+    // Say so, and make the undo subtract exactly what this tap added (computed from current
+    // state, not inside the updater, so it can't be double-counted).
+    const stamp = Date.now();
+    const mergedInto = {};
+    meals.forEach(m => {
+      const e = freezerItems.find(i => i.name === m.name && i.cookedAt === today);
+      if (e) mergedInto[e.id] = (mergedInto[e.id] || 0) + portions;
+    });
+    offerUndo(Object.keys(mergedInto).length
+        ? `Uke ${week+1} var allerede lagt i fryseren i dag — porsjonene er lagt til én gang til.`
+        : `Uke ${week+1} er lagt i fryseren.`,
+      () => setFreezerItems(cur => cur.flatMap(i => {
+        if (String(i.id).startsWith(`${stamp}-`)) return [];
+        const n = mergedInto[i.id];
+        return n ? [{ ...i, total: Math.max(0, i.total - n), remaining: Math.max(0, i.remaining - n) }] : [i];
+      })));
     setFreezerItems(prev => {
       let updated = [...prev];
       meals.forEach(m => {
@@ -856,7 +900,7 @@ function App() {
             : i);
         } else {
           const recipe = recipeCache[m.name];   // shelf life doesn't depend on scale: any version will do
-          updated.push({ id: `${Date.now()}-${m.name}`, name: m.name,
+          updated.push({ id: `${stamp}-${m.name}`, name: m.name,
             emoji: m.emoji || '🍽', protein: m.protein,
             remaining: portions, total: portions, portionCount: portions, cookedAt: today,
             freezerLifeDays: recipe?.freezerLifeDays || null });
@@ -882,6 +926,7 @@ function App() {
     // Lists don't record their units, so a list built in the other system can't be flagged stale
     setShoppingLists({});
     setLastShoppingKeys({});
+    setCheckedItems({});
   };
 
   // weekPlanKey includes portions, so existing lists turn stale (banner, check-offs kept)
@@ -996,7 +1041,8 @@ function App() {
   // ── Add manual meal ───────────────────────────────────────────────────────
   const addManualMeal = useCallback(async () => {
     const name = manualInput.trim();
-    if (!name || !anthropicKey) return;
+    if (!name) return;
+    if (!anthropicKey) { setManualError('Legg inn Anthropic API-nøkkel i Innstillinger først.'); return; }
     if (suggestions.some(m => m.name.toLowerCase() === name.toLowerCase())) {
       setManualError('Denne retten er allerede i forslagslisten.');
       return;
@@ -1043,7 +1089,7 @@ function App() {
     const cuisineLine   = cuisineGoals ? `\nKjøkkenmål per uke (veiledende): ${cuisineGoals}.` : "";
     const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}. Dette gjelder også rettnavn og inspirasjonskilder – ikke bruk ekskluderte råvarer i navn, beskrivelser eller som grunnlag for retten.` : "";
     const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
-    const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
+    const alreadyPlanned = plan.slice(0, weeks).flat().filter(Boolean).map(m=>m.name);   // hidden weeks aren't planned
     const avoidLine     = alreadyPlanned.length ? `\nDisse er allerede planlagt, ikke gjenta dem: ${alreadyPlanned.join(", ")}.` : "";
     const historyLine   = mealHistory.length ? `\nMathistorikk (nylig brukt, unngå gjentakelse): ${mealHistory.slice(-30).join(", ")}.` : "";
     try {
@@ -1052,7 +1098,8 @@ function App() {
         headers: anthropicHeaders,
         body: JSON.stringify({
           model:"claude-sonnet-5", thinking:{type:"disabled"},
-          max_tokens: Math.max(3000, suggestionCount*weeks*220),
+          // 30 suggestions × 4 weeks would ask for 26,400 tokens unstreamed; cap where a reply still arrives
+          max_tokens: Math.min(16000, Math.max(3000, suggestionCount*weeks*220)),
           system: SYSTEM_PROMPT,
           messages:[{
             role:"user",
@@ -1107,7 +1154,7 @@ Mulige verdier for "category": "suppe", "ovn", "gryte", "pasta", "kjapp", "salat
     setRerollLoading(proteinKey); setError(null); setRetryFn(null);
     const exclusionLine = exclusions.trim() ? `\nUngå disse ingrediensene/allergenene: ${exclusions.trim()}. Dette gjelder også rettnavn og inspirasjonskilder – ikke bruk ekskluderte råvarer i navn, beskrivelser eller som grunnlag for retten.` : "";
     const dislikedLine  = dislikedMeals.length ? `\nFamilien likte ikke disse rettene – ikke foreslå dem: ${dislikedMeals.join(", ")}.` : "";
-    const alreadyPlanned = plan.flat().filter(Boolean).map(m=>m.name);
+    const alreadyPlanned = plan.slice(0, weeks).flat().filter(Boolean).map(m=>m.name);   // hidden weeks aren't planned
     const existing = suggestions.filter(s=>s.protein!==proteinKey).map(s=>s.name);
     const avoidLine = [...alreadyPlanned, ...existing].length
       ? `\nDisse er allerede foreslått eller planlagt, ikke gjenta dem: ${[...alreadyPlanned,...existing].join(", ")}.`
@@ -1134,7 +1181,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       } else { setError("Kunne ikke generere nye forslag."); setRetryFn(() => () => rerollProtein(proteinKey)); }
     } catch(err) { setError(`Nettverksfeil: ${err.message}`); setRetryFn(() => () => rerollProtein(proteinKey)); }
     setRerollLoading(null);
-  }, [anthropicKey, portions, maxTime, exclusions, plan, suggestions, mealHistory, dislikedMeals]);
+  }, [anthropicKey, portions, maxTime, exclusions, plan, weeks, suggestions, mealHistory, dislikedMeals]);
 
   // ── Shopping list ─────────────────────────────────────────────────────────
   // Opening a list never regenerates it: regenerating wipes the check-offs, which is exactly
@@ -1262,6 +1309,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     if (unitsChanged && !data.shoppingLists) {
       setShoppingLists({});
       setLastShoppingKeys({});
+      setCheckedItems({});
     }
   };
 
@@ -2216,7 +2264,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:8 }}>
                 {filteredSuggestions.map((meal,i) => {
                   return (
-                    <div key={i} draggable
+                    <div key={meal.name} draggable
                       onDragStart={e=>{setDragMeal(meal);setDragSource(null);e.dataTransfer.effectAllowed="move";}}
                       onDragEnd={()=>{setDragMeal(null);setDragSource(null);setDragOverCell(null);}}
                       onClick={()=>toggleCard(meal)}
@@ -2291,7 +2339,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 🛒 Handleliste — {portions} porsjoner per rett
               </h2>
               <div style={{ marginLeft:"auto", display:"flex", gap:8 }}>
-                {Object.keys(checkedItems[shoppingWeek] || {}).length > 0 && (
+                {shoppingLists[shoppingWeek] && Object.keys(checkedItems[shoppingWeek] || {}).length > 0 && (
                   <button onClick={()=>setCheckedItems(prev=>{ const n={...prev}; delete n[shoppingWeek]; return n; })} style={{
                     padding:"6px 14px", borderRadius:6, border:"1px solid #2a2b30", background:"transparent",
                     color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>✕ Nullstill</button>
@@ -2323,7 +2371,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       border: isActive ? "2px solid #e8a838" : "1px solid #2a2b30",
                       background: isActive ? "#22232a" : "transparent",
                       color: isActive ? "#e8e0d0" : "#b4b2c2", fontSize:12 }}>
-                    Uke {w+1}{hasList ? " ✓" : ""}{checkedCount > 0 ? <span style={{ color:"#e8a838", marginLeft:4 }}>{checkedCount}/{totalCount}</span> : null}
+                    Uke {w+1}{hasList ? " ✓" : ""}{hasList && checkedCount > 0 ? <span style={{ color:"#e8a838", marginLeft:4 }}>{checkedCount}/{totalCount}</span> : null}
                   </button>
                 );
               })}
@@ -2688,7 +2736,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:11, color:"#747280", fontFamily:"sans-serif" }}>{favourites.length} retter</span>
                   {favourites.length > 0 && (
-                    <button onClick={()=>setFavourites([])} style={{ padding:"4px 10px", borderRadius:5,
+                    <button onClick={()=>{ const removed = favourites; setFavourites([]);
+                      offerUndo(`${removed.length} favoritter er fjernet.`, () => setFavourites(restoreInto(removed, m => m.name))); }}
+                      style={{ padding:"4px 10px", borderRadius:5,
                       border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm alle</button>
                   )}
@@ -2726,7 +2776,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     {dislikedMeals.length} retter
                   </span>
                   {dislikedMeals.length > 0 && (
-                    <button onClick={()=>setDislikedMeals([])} style={{ padding:"4px 10px", borderRadius:5,
+                    <button onClick={()=>{ const removed = dislikedMeals; setDislikedMeals([]);
+                      offerUndo(`«Liker ikke»-listen er tømt.`, () => setDislikedMeals(restoreInto(removed))); }}
+                      style={{ padding:"4px 10px", borderRadius:5,
                       border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm liste</button>
                   )}
@@ -2763,7 +2815,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     {mealHistory.length} middager
                   </span>
                   {mealHistory.length>0 && (
-                    <button onClick={()=>setMealHistory([])} style={{ padding:"4px 10px", borderRadius:5,
+                    <button onClick={()=>{ const removed = mealHistory; setMealHistory([]);
+                      offerUndo('Mathistorikken er tømt.', () => setMealHistory(cur => [...removed.filter(n => !cur.includes(n)), ...cur].slice(-100))); }}
+                      style={{ padding:"4px 10px", borderRadius:5,
                       border:"1px solid #e87060", background:"#3a1a1a", color:"#e87060",
                       cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Tøm historikk</button>
                   )}
@@ -2849,7 +2903,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 )}
               </h2>
               {hasDepleted && (
-                <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.remaining>0))}
+                <button onClick={()=>{ const removed = freezerItems.filter(i=>i.remaining===0);
+                  setFreezerItems(prev=>prev.filter(i=>i.remaining>0));
+                  offerUndo(`${removed.length} tomme ${removed.length === 1 ? 'rett' : 'retter'} er fjernet.`, () => setFreezerItems(restoreInto(removed, i => i.id))); }}
                   style={{ padding:"6px 12px", borderRadius:7, border:"1px solid #e87060",
                     background:"#3a1a1a", color:"#e87060", cursor:"pointer",
                     fontSize:11, fontFamily:"sans-serif" }}>Fjern tomme</button>
@@ -2882,7 +2938,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <div style={{ fontSize:10, color:"#747280", fontFamily:"sans-serif",
                           letterSpacing:"0.8px", fontWeight:600 }}>
-                          LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()} · {items[0].portionCount ?? items[0].total} PORSJONER
+                          LAGET {new Date(date+'T12:00:00').toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric"}).toUpperCase()}{(() => {
+                            // Only claim a batch-wide portion count when every item in the batch shares it
+                            const counts = [...new Set(items.map(i => i.portionCount ?? i.total))];
+                            return counts.length === 1 ? ` · ${counts[0]} PORSJONER` : '';
+                          })()}
                         </div>
                         {isOld    && <span style={{ fontSize:9, color:"#c8882a", background:"#2a1e0a",
                           border:"1px solid #4a3a1a", borderRadius:6, padding:"1px 6px",
@@ -2954,7 +3014,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                                   fontSize:16, fontFamily:"sans-serif", lineHeight:1 }}>+</button>
                             </div>
                           )}
-                          <button onClick={()=>setFreezerItems(prev=>prev.filter(i=>i.id!==item.id))}
+                          <button title="Fjern fra fryseren" onClick={()=>{
+                              // sits right next to +: one misplaced tap shouldn't cost the entry
+                              const idx = freezerItems.findIndex(i=>i.id===item.id);
+                              setFreezerItems(prev=>prev.filter(i=>i.id!==item.id));
+                              offerUndo(`${item.name} er fjernet fra fryseren.`, () => setFreezerItems(cur => {
+                                if (cur.some(i=>i.id===item.id)) return cur;
+                                const n = [...cur]; n.splice(Math.min(idx, n.length), 0, item); return n;
+                              }));
+                            }}
                             style={{ width:28, height:28, borderRadius:6, border:"1px solid #3a2a2a",
                               background:"transparent", color:"#d47070", cursor:"pointer",
                               fontSize:14, fontFamily:"sans-serif", flexShrink:0 }}>✕</button>
@@ -2972,6 +3040,19 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
       {/* ── CONFIRM CLEAR MODAL ── */}
       {/* Drive conflict: this device and Drive both changed since they last matched */}
+      {undoToast && (
+        <div role="status" style={{ position:"fixed", left:"50%", transform:"translateX(-50%)",
+          bottom: isMobile ? 72 : 24, zIndex:250, background:"#22232a", border:"1px solid #3a3b42",
+          borderRadius:10, padding:"10px 12px 10px 16px", display:"flex", alignItems:"center", gap:14,
+          boxShadow:"0 6px 24px rgba(0,0,0,0.45)", maxWidth:"calc(100vw - 32px)", boxSizing:"border-box",
+          fontSize:13, color:"#e4ddd0", fontFamily:"sans-serif" }}>
+          <span>{undoToast.message}</span>
+          <button onClick={()=>{ undoToast.restore(); clearTimeout(undoTimer.current); setUndoToast(null); }}
+            style={{ padding:"5px 12px", borderRadius:6, border:"1px solid #4a3a1a", background:"transparent",
+              color:"#e8a838", cursor:"pointer", fontSize:12, fontWeight:600, fontFamily:"sans-serif", flexShrink:0 }}>Angre</button>
+        </div>
+      )}
+
       {driveConflict && (() => {
         const count = d => ({
           meals: (d.plan || []).flat().filter(Boolean).length,
@@ -3095,7 +3176,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <button onClick={()=>setConfirmRemoveBatch(null)} style={{ padding:"8px 20px", borderRadius:8,
                 border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                 cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Avbryt</button>
-              <button onClick={()=>{ const { date } = confirmRemoveBatch; setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date)); setConfirmRemoveBatch(null); }}
+              <button onClick={()=>{ const { date } = confirmRemoveBatch; const removed = freezerItems.filter(i=>i.cookedAt===date);
+                setFreezerItems(prev=>prev.filter(i=>i.cookedAt!==date)); setConfirmRemoveBatch(null);
+                offerUndo('Batchen er fjernet.', () => setFreezerItems(restoreInto(removed, i => i.id))); }}
                 style={{ padding:"8px 20px", borderRadius:8, border:"none",
                 background:"#5a2020", color:"#f0c0c0", cursor:"pointer", fontSize:13,
                 fontFamily:"sans-serif", fontWeight:700 }}>Ja, fjern batch</button>
@@ -3519,7 +3602,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <button onClick={()=>{ saveNote(); setPlanModal(null); }} style={{ padding:"8px 18px",
                 borderRadius:8, border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                 cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Lukk</button>
-              <button onClick={()=>{ saveNote(); removeCell(planModal.week,planModal.day); setPlanModal(null); }}
+              <button onClick={()=>{ saveNote(); removeCell(planModal.week,planModal.day,planModal.meal); setPlanModal(null); }}
                 style={{ padding:"8px 20px", borderRadius:8, border:"1px solid #5a2a2a",
                   background:"#2a1818", color:"#d4a0a0", cursor:"pointer", fontSize:13,
                   fontFamily:"sans-serif", fontWeight:600 }}>🗑 Fjern fra plan</button>

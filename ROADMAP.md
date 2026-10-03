@@ -29,11 +29,16 @@ The current exclusions field is free text, which works fine for a personal famil
 
 Remaining findings from the September 2026 audit. The P1 and P2 findings and nine P3s were fixed in the first pass; a second pass cleared ten more — D10 (quota banner + recipe-cache eviction), D14 (stale shopping list no longer auto-regenerates over your check-offs), L11/L12 (rounded totals), PF1/PF2 (hash-skipped uploads, three concurrent recipe loads), D15 (`navigator.storage.persist()` + "last export" line), L10 (drag highlight in state), L15/L17/L18 (manual-dish filtering, the mobile breakpoint, kr/porsjon/dag) and S3 (revoke the refresh token in a POST body). All are covered by `test_phase5.py`.
 
-D8 followed in October: recipes are now scale-tagged, so a portions or units misclick no longer throws away the recipe cache or the shopping lists (`test_phase6.py`). S7 too: the AI's output is checked against the exclusions in the browser, with Norwegian allergen synonyms (`test_phase7.py`).
+D8 followed in October: recipes are now scale-tagged, so a portions or units misclick no longer throws away the recipe cache or the shopping lists (`test_phase6.py`). S7 too: the AI's output is checked against the exclusions in the browser, with Norwegian allergen synonyms (`test_phase7.py`). Then most of D16 and L19: a shared undo toast for one-click deletes, an explicit warning when a week is logged to the freezer twice in a day, modals closing on Back, hidden weeks kept out of prompts, and smaller fixes (`test_phase8.py`).
 
-These are what's left.
+What's left is deliberately parked:
 
-- **S5, S6, S8, D11, D16, L19, PF3** — low-severity items: no OAuth `state` parameter (PKCE covers the real risk), client secret in localStorage (an accepted trade-off), personal email in early public commits, various missing undo toasts, and one large component re-rendering on every keystroke.
+- **S5 OAuth `state` parameter** — PKCE already blocks login CSRF; adding `state` would change the Drive connect flow, so do it together with the next real-Drive test.
+- **S6 client secret in localStorage** — accepted trade-off for a personal app; revisit only if the audience grows.
+- **S8 personal email in early public commits** — informational; rewriting public history would be more disruptive than the exposure.
+- **PF3 one large component re-renders per keystroke** — profile before acting; nobody has reported lag.
+- **D16 leftovers** — a corrupt localStorage value still falls back to its default silently and is then overwritten. Fix if it is ever seen in practice: keep the raw value under a backup key before falling back.
+- **L19 leftover** — in select mode, clicking an occupied grid cell copies that dish into the selected cell. Possibly intended (it's a quick way to plan the same dish twice), so ask before changing it.
 
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
 
