@@ -116,6 +116,22 @@ function pruneRecipeCache(cache, plan, favourites) {
   for (const [name, recipe] of Object.entries(cache || {})) if (keep.has(name)) out[name] = recipe;
   return out;
 }
+// Recipe amounts are baked in for one portions/units setting, so each cached recipe records the
+// scale it was fetched at. A scale change hides recipes instead of deleting them: a misclick on
+// the portions stepper and back costs nothing.
+const scaleKey = (portions, units) => `${portions}|${units}`;
+// Untagged entries predate scale tags. The old code wiped the cache on every scale change,
+// so anything untagged was fetched at the scale it was stored alongside.
+function tagRecipeScale(cache, scale) {
+  const out = {};
+  for (const [name, r] of Object.entries(cache || {})) if (isObj(r)) out[name] = r.scale ? r : { ...r, scale };
+  return out;
+}
+function recipesAtScale(cache, scale) {
+  const out = {};
+  for (const [name, r] of Object.entries(cache || {})) if (r?.scale === scale) out[name] = r;
+  return out;
+}
 
 // ── Utilities ──────────────────────────────────────────────────────────────
 function parseMeals(text) {
@@ -266,6 +282,7 @@ function normalizeRecipe(r) {
     if (Number.isFinite(n) && n >= 0) out[k] = Math.round(n); else delete out[k];
   }
   if (r.pricePerPortion !== undefined && !(isObj(r.pricePerPortion) && Number.isFinite(Number(r.pricePerPortion.low)))) delete out.pricePerPortion;
+  if (r.scale !== undefined && !(typeof r.scale === 'string' && /^\d+\|(metric|imperial)$/.test(r.scale))) delete out.scale;
   return out;
 }
 function normalizeFreezerItem(f, i) {
@@ -458,7 +475,9 @@ function App() {
   const [dragSource,    setDragSource]    = useState(null);
   const [suggestionModal, setSuggestionModal] = useState(null);
   const [planModal,     setPlanModal]     = useState(null);
-  const [recipeCache,   setRecipeCache]   = useState(() => lsGetNorm('recipeCache', {}));
+  const [recipeCache,   setRecipeCache]   = useState(() => tagRecipeScale(lsGetNorm('recipeCache', {}), scaleKey(portions, units)));
+  // Every read goes through this view: only recipes fetched at the current portions/units
+  const recipes = useMemo(() => recipesAtScale(recipeCache, scaleKey(portions, units)), [recipeCache, portions, units]);
   const [recipeLoading, setRecipeLoading] = useState(null);
   const [recipeError,   setRecipeError]   = useState(null);   // { name, message } for the last failed recipe fetch
   const [importPreview, setImportPreview] = useState(null);
@@ -663,7 +682,7 @@ function App() {
     let count = 0;
     for (let d=0;d<7;d++) {
       const m = plan[w][d]; if (!m) continue;
-      const r = recipeCache[m.name]; if (!r?.nutrition) continue;
+      const r = recipes[m.name]; if (!r?.nutrition) continue;
       t.calories += r.nutrition.calories||0; t.protein += r.nutrition.protein||0;
       t.fat += r.nutrition.fat||0; t.carbs += r.nutrition.carbs||0; t.fiber += r.nutrition.fiber||0;
       count++;
@@ -671,7 +690,7 @@ function App() {
     // AI values can carry decimals; summing them shows floating-point noise
     for (const k of Object.keys(t)) t[k] = Math.round(t[k]);
     return { ...t, count };
-  }), [plan, weeks, recipeCache]);
+  }), [plan, weeks, recipes]);
 
   const batchTimeSummary = useMemo(() =>
     Array.from({length: weeks}, (_, w) => {
@@ -680,7 +699,7 @@ function App() {
       for (let d = 0; d < 7; d++) {
         const m = plan[w][d];
         if (!m || m.leftover) continue;
-        const r = recipeCache[m.name];
+        const r = recipes[m.name];
         if (r?.activeMins == null) allLoaded = false;
         const active = r?.activeMins ?? parseInt(m.prepTime) ?? 0;
         const passive = r?.passiveMins ?? 0;
@@ -692,7 +711,7 @@ function App() {
       for (let i = 0; i < passiveTimes.length; i += 4) passiveEst += passiveTimes[i];
       return { estimated: Math.round(sumActive + passiveEst), count, allLoaded };
     }),
-  [plan, weeks, recipeCache]);
+  [plan, weeks, recipes]);
 
   const fmtBatchTime = mins => {
     const h = Math.floor(mins / 60), m = mins % 60;
@@ -754,7 +773,7 @@ function App() {
             ? { ...i, total: i.total + portions, remaining: i.remaining + portions }
             : i);
         } else {
-          const recipe = recipeCache[m.name];
+          const recipe = recipeCache[m.name];   // shelf life doesn't depend on scale: any version will do
           updated.push({ id: `${Date.now()}-${m.name}`, name: m.name,
             emoji: m.emoji || '🍽', protein: m.protein,
             remaining: portions, total: portions, portionCount: portions, cookedAt: today,
@@ -773,20 +792,21 @@ function App() {
   const isFavourite = (meal) => favourites.some(m=>m.name===meal.name);
 
   // ── Units ─────────────────────────────────────────────────────────────────
+  // Neither clears the recipe cache: recipes carry their scale and the `recipes` view hides
+  // the ones that don't match, so switching back restores them without new API calls.
   const changeUnits = (newUnits) => {
     if (newUnits === units) return;
     setUnits(newUnits);
-    setRecipeCache({});
+    // Lists don't record their units, so a list built in the other system can't be flagged stale
     setShoppingLists({});
     setLastShoppingKeys({});
   };
 
+  // weekPlanKey includes portions, so existing lists turn stale (banner, check-offs kept)
+  // rather than being deleted — and a misclick back to the old value un-stales them
   const changePortions = (n) => {
     if (n === portions) return;
     setPortions(n);
-    setRecipeCache({});
-    setShoppingLists({});
-    setLastShoppingKeys({});
   };
 
   // ── Cuisine enable/disable ────────────────────────────────────────────────
@@ -827,7 +847,7 @@ function App() {
 
   // ── Recipe fetch ──────────────────────────────────────────────────────────
   const fetchRecipe = useCallback(async (meal) => {
-    if (recipeCache[meal.name] || !anthropicKey) return;
+    if (recipes[meal.name] || !anthropicKey) return;
     const scale = { portions, units };
     setRecipeLoading(meal.name);
     setRecipeError(prev => (prev?.name === meal.name ? null : prev));
@@ -861,7 +881,7 @@ function App() {
       }
       // Portions or units changed while this was loading: the amounts are for the old scale
       if (scaleRef.current.portions !== scale.portions || scaleRef.current.units !== scale.units) return false;
-      setRecipeCache(prev => ({...prev, [meal.name]:parsed}));
+      setRecipeCache(prev => ({...prev, [meal.name]:{ ...parsed, scale: scaleKey(scale.portions, scale.units) }}));
       return true;
     } catch (err) {
       setRecipeError({ name: meal.name, message: err instanceof TypeError ? 'Nettverksfeil – sjekk tilkoblingen og prøv igjen.' : err.message });
@@ -869,10 +889,10 @@ function App() {
     } finally {
       setRecipeLoading(null);
     }
-  }, [recipeCache, anthropicKey, kassalKey, fetchKassalPrice, portions, units]);
+  }, [recipes, anthropicKey, kassalKey, fetchKassalPrice, portions, units]);
 
   const fetchAllRecipes = async () => {
-    const meals = plan.slice(0,weeks).flat().filter(m => m && !m.leftover && !recipeCache[m.name]);
+    const meals = plan.slice(0,weeks).flat().filter(m => m && !m.leftover && !recipes[m.name]);
     const unique = [...new Map(meals.map(m=>[m.name,m])).values()];
     const scale = { portions, units };
     const failed = [];
@@ -1064,11 +1084,11 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     if (!anthropicKey) { setError("Legg inn Anthropic API-nøkkel i Innstillinger."); return; }
     setShoppingLoading(true); setError(null); setRetryFn(null);
     const cachedMealsCount = plannedMeals.filter(name => {
-      const cached = recipeCache[name];
+      const cached = recipes[name];
       return cached && getIngredients(cached).length > 0;
     }).length;
     const mealLines = plannedMeals.map((name, i) => {
-      const cached = recipeCache[name];
+      const cached = recipes[name];
       if (cached) {
         const ingredients = getIngredients(cached);
         if (ingredients.length) {
@@ -1152,14 +1172,14 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     e.target.value="";
   };
 
-  // Cached recipe amounts are baked in for one portions/units setting
+  // Recipes are scale-tagged, so a portions/units change in the file needs no cache clearing.
+  // Shopping lists don't record their units: drop them if the units change and the file has none.
   const applyImported = (data) => {
-    const scaleChanged = (data.portions && data.portions !== portions) || (data.units && data.units !== units);
+    const unitsChanged = data.units && data.units !== units;
     applyDriveData(data);
-    if (scaleChanged && !data.recipeCache) {
-      setRecipeCache({});
-      setShoppingLists(data.shoppingLists || {});
-      setLastShoppingKeys(data.lastShoppingKeys || {});
+    if (unitsChanged && !data.shoppingLists) {
+      setShoppingLists({});
+      setLastShoppingKeys({});
     }
   };
 
@@ -1207,7 +1227,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     if (d.units) setUnits(d.units);
     if (d.shoppingLists) setShoppingLists(d.shoppingLists);
     if (d.lastShoppingKeys) setLastShoppingKeys(d.lastShoppingKeys);
-    if (d.recipeCache) setRecipeCache(d.recipeCache);
+    if (d.recipeCache) setRecipeCache(tagRecipeScale(d.recipeCache, scaleKey(d.portions || portions, d.units || units)));
     if (d.suggestionCount) setSuggestionCount(d.suggestionCount);
     if (d.favourites) setFavourites(d.favourites);
     if (d.mealNotes) setMealNotes(d.mealNotes);
@@ -1895,7 +1915,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             </div>
 
             {/* Load all recipes button */}
-            {plan.slice(0,weeks).flat().some(m=>m&&!m.leftover&&!recipeCache[m.name]) && (
+            {plan.slice(0,weeks).flat().some(m=>m&&!m.leftover&&!recipes[m.name]) && (
               <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
                 <button onClick={fetchAllRecipes} disabled={!!recipeLoading} style={{
                   padding:"6px 14px", borderRadius:7, border:"1px solid #2a2b30",
@@ -2242,7 +2262,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 ? sl.categories.filter(c => c.name !== 'Har du dette hjemme?')
                 : sl.categories;
               const estimatedMeals = weekMeals.filter(m => {
-                const cached = recipeCache[m.name];
+                const cached = recipes[m.name];
                 if (!cached) return true;
                 return getIngredients(cached).length === 0;
               });
@@ -2253,7 +2273,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     <div style={{ background:"#1c1a12", border:"1px solid #3a3015", borderRadius:8,
                       padding:"10px 14px", marginBottom:14, fontSize:12, color:"#c8a84a", fontFamily:"sans-serif",
                       display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
-                      ⚠ Planen er endret siden denne listen ble laget.
+                      ⚠ Planen eller antall porsjoner er endret siden denne listen ble laget.
                       <button onClick={() => generateShoppingList(shoppingWeek, true)} style={{
                         background:"#3a3015", border:"1px solid #4a3a1a", borderRadius:6,
                         color:"#e8a838", fontSize:11, fontFamily:"sans-serif", padding:"4px 10px",
@@ -3135,7 +3155,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               );
             })()}
             {(() => {
-              const recipe = recipeCache[suggestionModal.name];
+              const recipe = recipes[suggestionModal.name];
               const isLoadingRecipe = recipeLoading===suggestionModal.name;
               if (isLoadingRecipe) return <div style={{ fontSize:12, color:"#a8a6b6", fontFamily:"sans-serif", padding:"20px 0", textAlign:"center" }}>Laster oppskrift...</div>;
               if (!recipe) return (
@@ -3283,7 +3303,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               <div style={{ textAlign:"center", padding:"24px 0", fontSize:13, color:"#747280", fontFamily:"sans-serif" }}>
                 Laster oppskrift...
               </div>
-            ) : !recipeCache[planModal.meal.name] ? (
+            ) : !recipes[planModal.meal.name] ? (
               <div style={{ marginBottom:16 }}>
                 {recipeError?.name === planModal.meal.name && (
                   <div style={{ fontSize:12, color:"#e87a38", fontFamily:"sans-serif", marginBottom:8 }}>⚠ {recipeError.message}</div>
@@ -3295,8 +3315,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 </button>
               </div>
             ) : null}
-            {!planModal.meal.leftover && recipeCache[planModal.meal.name] && (() => {
-              const recipe = recipeCache[planModal.meal.name];
+            {!planModal.meal.leftover && recipes[planModal.meal.name] && (() => {
+              const recipe = recipes[planModal.meal.name];
               return (
                 <div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:18 }}>
@@ -3376,7 +3396,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
             })()}
 
             {(() => {
-              const recipe = recipeCache[planModal?.meal?.name];
+              const recipe = recipes[planModal?.meal?.name];
               if (!recipe?.tips?.length) return null;
               return (
                 <div style={{ borderTop:"1px solid #22232a", paddingTop:14, marginBottom:16 }}>

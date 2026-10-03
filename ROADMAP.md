@@ -29,9 +29,10 @@ The current exclusions field is free text, which works fine for a personal famil
 
 Remaining findings from the September 2026 audit. The P1 and P2 findings and nine P3s were fixed in the first pass; a second pass cleared ten more — D10 (quota banner + recipe-cache eviction), D14 (stale shopping list no longer auto-regenerates over your check-offs), L11/L12 (rounded totals), PF1/PF2 (hash-skipped uploads, three concurrent recipe loads), D15 (`navigator.storage.persist()` + "last export" line), L10 (drag highlight in state), L15/L17/L18 (manual-dish filtering, the mobile breakpoint, kr/porsjon/dag) and S3 (revoke the refresh token in a POST body). All are covered by `test_phase5.py`.
 
-These are what's left, roughly in the order they're worth doing.
+D8 followed in October: recipes are now scale-tagged, so a portions or units misclick no longer throws away the recipe cache or the shopping lists (`test_phase6.py`).
 
-- **D8 portions stepper** — one misclick still clears cached recipes and shopping lists. Fix: tag each cached recipe with its portions/units and select by scale, instead of clearing the cache. This is the only remaining item with real data cost, and the largest of the four: every `recipeCache[name]` read has to go through the scale-aware view.
+These are what's left.
+
 - **S5–S8, D11, D16, L19, PF3** — low-severity items: no OAuth `state` parameter (PKCE covers the real risk), client secret in localStorage (an accepted trade-off), no client-side check that AI output respects the allergen exclusions, personal email in early public commits, various missing undo toasts, and one large component re-rendering on every keystroke.
 
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
