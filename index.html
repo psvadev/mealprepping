@@ -473,6 +473,8 @@ const DRIVE_KEYS = ['plan','weeks','portions','suggestions','proteinTargets','ma
   'recipeCache','favourites','mealNotes','mealHistory','freezerItems','dislikedMeals'];
 // User data worth rescuing when it can't be parsed (settings and credentials just fall back)
 const RECOVER_KEYS = [...DRIVE_KEYS, 'checkedItems'];
+// Device bookkeeping the crash-screen download leaves out: it isn't the user's data and means nothing elsewhere
+const RESCUE_SKIP = ['driveFileId', 'driveSyncedAt', 'driveSyncedHash', 'pendingDriveLoad', 'lastExportAt'];
 const DATA_LABELS = { plan:'ukeplanen', freezerItems:'fryseren', mealNotes:'notatene', favourites:'favorittene',
   suggestions:'forslagene', shoppingLists:'handlelistene', checkedItems:'avkrysningene i handlelisten',
   recipeCache:'oppskriftsbufferen', mealHistory:'mathistorikken', dislikedMeals:'«Liker ikke»-listen' };
@@ -1363,10 +1365,13 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
       let raw;
       try { raw = JSON.parse(ev.target.result); }
       catch { setError("Kunne ikke lese filen. Sjekk at det er en gyldig middagsplan-fil."); return; }
-      const data = normalizeData(raw);
+      // Also accept the template's { version, data } envelope; this app's own files are flat
+      const body = isObj(raw) && isObj(raw.data) && raw.version != null ? raw.data : raw;
+      const data = normalizeData(body);
       if (!data || !Object.keys(data).length) { setError("Filen inneholder ingen middagsplan-data."); return; }
       setError(null);
-      setImportPreview({ data, fileName: file.name, exportedAt: typeof raw.exportedAt === 'string' ? raw.exportedAt : null });
+      const stamp = [raw?.exportedAt, raw?.savedAt, body?.exportedAt].find(v => typeof v === 'string') || null;
+      setImportPreview({ data, fileName: file.name, exportedAt: stamp });
     };
     reader.readAsText(file);
     e.target.value="";
@@ -3779,14 +3784,24 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) { console.error('Reheat & Eat crashed:', error, info && info.componentStack); }
   render() {
     if (!this.state.error) return this.props.children;
+    // Reads storage directly, so it works while the app can't render. Written in Export's flat format so
+    // Import accepts it; credentials and device bookkeeping stay out. A value that can't be parsed — and
+    // any rescue copy lsGet kept — goes under `unreadable` as text instead of being dropped: after a
+    // crash it is the likeliest culprit, and the one thing that must not be lost.
     const exportData = () => {
-      const data = {};
+      const out = { exportedAt: new Date().toISOString() };
+      const unreadable = {};
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (!k.startsWith(PFX) || /(Key|Token|Secret|ClientId)$/.test(k)) continue;
-        try { data[k.slice(PFX.length)] = JSON.parse(localStorage.getItem(k)); } catch {}
+        if (!k || !k.startsWith(PFX)) continue;
+        const name = k.slice(PFX.length);
+        if (/(Key|Token|Secret|ClientId)$/.test(name) || RESCUE_SKIP.includes(name)) continue;
+        const raw = localStorage.getItem(k);
+        if (name.endsWith('_corrupt')) { unreadable[name.slice(0, -'_corrupt'.length)] = raw; continue; }
+        try { out[name] = JSON.parse(raw); } catch { unreadable[name] = raw; }
       }
-      downloadFile(JSON.stringify(data, null, 2), `middagsplan-nodeksport-${localDateString()}.json`, 'application/json');
+      if (Object.keys(unreadable).length) out.unreadable = unreadable;
+      downloadFile(JSON.stringify(out, null, 2), `middagsplan-nodeksport-${localDateString()}.json`, 'application/json');
     };
     const btn = { padding:"8px 16px", borderRadius:8, border:"1px solid #2a2b30", background:"transparent",
       color:"#b4b2c2", cursor:"pointer", fontSize:13, fontFamily:"sans-serif" };

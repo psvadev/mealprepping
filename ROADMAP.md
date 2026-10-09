@@ -49,9 +49,9 @@ Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATT
 - **a. Babel pin** — done: 7.29.8 → 7.29.10 with `pin_cdn.py` (newer than the 7.29.9 the template pins; chosen by the user). `tests/test_environment.py` checks the pins and that a tampered script is refused.
 - **c. Corrupt stored data** — done: an unreadable user-data value is kept as `mp_<key>_corrupt` with a recovery banner (download, delete with undo); closes the D16 leftover above (`tests/test_storage.py`).
 - **d. Drive conflict** — done: "Bestem senere" and Escape pick neither side; sync pauses with a "Velg nå" banner, auto-save stays blocked, and automatic triggers don't reopen the question. Escape also cancels the import preview and "Fjerne hele batchen?" now (`test_drive_sync.py`, `test_ui.py`).
-- **e. Rescue download** — the ErrorBoundary file already imports and excludes credentials, but silently drops any value it can't parse — the very values a crash is likely about.
+- **e. Rescue download** — done: the crash-screen file keeps unparseable values and rescue copies as text under `unreadable`, is dated, leaves Drive bookkeeping out, and still imports; Import also accepts the template's `{ version, data }` envelope (the user chose to keep the flat format). `tests/test_import_export.py`.
 - **f. OAuth callback** — done: `state` sent and checked (closes S5), URL and single-use values cleaned before any exit, `?error=` handled, every failure explained in Settings, and a return from Google starts in Settings (`tests/test_oauth.py`). Before the fix the same 20 checks failed on every engine — a callback with a forged `state` was exchanged and connected.
-- **g. Dates** — the two `+'T12:00:00'` display parses are correct for every time zone a Norwegian household is in; changing them is optional.
+- **g. Dates** — not done, by decision: the two `+'T12:00:00'` display parses are correct for every time zone a Norwegian household is in, and the date logic already parses `YYYY-MM-DD` locally (`localDateString`, `daysSince`).
 
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
 
