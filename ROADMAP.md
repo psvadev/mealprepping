@@ -40,6 +40,18 @@ What's left is deliberately parked:
 - **D16 leftovers** — a corrupt localStorage value still falls back to its default silently and is then overwritten. Fix if it is ever seen in practice: keep the raw value under a backup key before falling back.
 - **L19 leftover** — in select mode, clicking an occupied grid cell copies that dish into the selected cell. Possibly intended (it's a quick way to plan the same dish twice), so ask before changing it.
 
+## Template gaps (October 2026)
+
+Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATTERNS.md), checked against this app on 2026-10-09. One commit per item.
+
+- **b. Escape handler before paint** — done: `useLayoutEffect` (`test_template_gaps.py`, all three engines).
+- **a. Babel pin** — `pin_cdn.py` now proposes 7.29.10 (a newer patch than the 7.29.9 the template pinned).
+- **c. Corrupt stored data** — an unreadable value still falls back to its default and is overwritten (the D16 leftover above); port the template's `<key>_corrupt` copy and recovery banner.
+- **d. Drive conflict** — the dialog can't be dismissed, so it never picks a side by accident, but it forces a choice on the spot; port the template's "decide later" path (status `conflict`, auto-save gated, "Velg nå" banner).
+- **e. Rescue download** — the ErrorBoundary file already imports and excludes credentials, but silently drops any value it can't parse — the very values a crash is likely about.
+- **f. OAuth callback** — an early return leaves the spent code in the URL, `?error=` is ignored, there is no `state` (S5 above), and failures surface in the top error bar rather than in Settings.
+- **g. Dates** — the two `+'T12:00:00'` display parses are correct for every time zone a Norwegian household is in; changing them is optional.
+
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
 
 ---

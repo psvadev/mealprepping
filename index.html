@@ -32,7 +32,7 @@ textarea:focus, input:focus { outline: none; }
 
 <script src="https://unpkg.com/@babel/standalone@7.29.8/babel.min.js" integrity="sha384-Ux6uBqExf/7ahsSNrA9VI7vuaw6sKjDoVdjdUxmIoL2qdlzFVZ157sTi6JK3Z9Q8" crossorigin="anonymous"></script>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useCallback, useRef, useMemo } = React;
+const { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } = React;
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const DAYS = ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
@@ -733,8 +733,10 @@ function App() {
     setSuggestionModal(null);
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Close modal on Escape
-  useEffect(() => {
+  // Close modal on Escape. A layout effect, not useEffect: a dialog opened by an async update (the
+  // variant picker after its fetch, say) is painted before React runs a useEffect, so an Escape pressed
+  // the moment it appears reached the previous handler — which didn't know the dialog existed
+  useLayoutEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
       if (manualOptions) { setManualOptions(null); return; }
