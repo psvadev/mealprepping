@@ -542,7 +542,14 @@ function App() {
 
   // UI state
   const VIEWS = ['plan','shopping','fryser','settings'];
-  const [view,          setView]          = useState(() => { const h = window.location.hash.slice(1); return VIEWS.includes(h) ? h : 'plan'; });
+  const [view,          setView]          = useState(() => {
+    // Back from Google sign-in: start in Settings, where Connect is and the result is shown. Switching
+    // there from the callback instead raced the URL sync on mount (it wrote #plan, whose hashchange
+    // could land after the switch and undo it)
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('code') || (q.has('error') && localStorage.getItem('drive_pkce_verifier'))) return 'settings';
+    const h = window.location.hash.slice(1); return VIEWS.includes(h) ? h : 'plan';
+  });
   const [loading,       setLoading]       = useState(false);
   const [shoppingLists, setShoppingLists] = useState(() => lsGetNorm('shoppingLists', {}));
   const [shoppingWeek,  setShoppingWeek]  = useState(0);
@@ -587,6 +594,7 @@ function App() {
   const [googleClientSecret, setGoogleClientSecret] = useState(() => lsGet('googleClientSecret', ''));
   const [driveStatus,        setDriveStatus]        = useState('idle');
   const [driveConflict,      setDriveConflict]      = useState(null);
+  const [driveError,         setDriveError]         = useState('');   // why the last Google sign-in failed, shown in Settings
   const [tabStale,           setTabStale]           = useState(false);
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
   const [driveConnected, setDriveConnected] = useState(() => !!lsGet('driveToken', null));
@@ -614,15 +622,25 @@ function App() {
   // ── OAuth callback — exchanges ?code= for Drive tokens on redirect back ──
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    if (!code) return;
+    const code = params.get('code'), oauthError = params.get('error');
     const verifier = localStorage.getItem('drive_pkce_verifier');
-    if (!verifier) return;
+    const expectedState = localStorage.getItem('drive_oauth_state');
+    // ?error= only means something if this app started a sign-in; ?code= is always OAuth's
+    if (!code && !(oauthError && verifier)) return;
+    // Clean up first, so no exit below leaves a spent code in the URL or a single-use value behind
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     localStorage.removeItem('drive_pkce_verifier');
-    window.history.replaceState({}, '', window.location.pathname);
+    localStorage.removeItem('drive_oauth_state');
+    // Every failure is explained in Settings, where the Connect button is
+    const fail = (msg) => { setDriveError(msg); setDriveStatus('error'); setView('settings'); };
+    if (oauthError) return fail(oauthError === 'access_denied'
+      ? 'Innloggingen hos Google ble avbrutt. Trykk «Koble til Google Drive» for å prøve igjen.'
+      : `Google-innloggingen feilet (${oauthError}). Trykk «Koble til Google Drive» for å prøve igjen.`);
+    if (!verifier || !expectedState || params.get('state') !== expectedState)
+      return fail('Svaret fra Google passet ikke med denne appens forespørsel. Trykk «Koble til Google Drive» på nytt.');
     const clientId     = lsGet('googleClientId', '');
     const clientSecret = lsGet('googleClientSecret', '');
-    if (!clientId) return;
+    if (!clientId) return fail('Client ID mangler. Fyll den inn og trykk «Koble til Google Drive» på nytt.');
     fetch('https://oauth2.googleapis.com/token', {
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body: new URLSearchParams({
@@ -635,13 +653,17 @@ function App() {
         lsSet('driveToken', { access_token: data.access_token, refresh_token: data.refresh_token,
           expires_at: Date.now() + (data.expires_in || 3600) * 1000 });
         setDriveConnected(true);
+        setDriveError('');
         lsSet('pendingDriveLoad', true);
       } else {
+        // A wrong secret or redirect URI comes back as an error body; the code is spent, so say why
         console.error('Drive token exchange failed:', data);
-        setError(`Google Drive-feil: ${data.error} — ${data.error_description || ''}`);
-        setDriveStatus('error');
+        fail(`Google avviste innloggingen: ${data.error_description || data.error || 'ukjent feil'}.`);
       }
-    }).catch(e => { console.error('Drive token exchange error:', e); setError(`Google Drive-nettverksfeil: ${e.message}`); setDriveStatus('error'); });
+    }).catch(e => {
+      console.error('Drive token exchange error:', e);
+      fail('Nettverksfeil mot Google. Trykk «Koble til Google Drive» på nytt.');
+    });
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
@@ -1491,9 +1513,16 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
   const connectGoogleDrive = useCallback(async () => {
     if (!googleClientId || !googleClientSecret) return;
+    setDriveError('');
     const { verifier, challenge } = await generatePKCE();
+    // `state` ties Google's answer to the sign-in this tab started: a stray, replayed or forged ?code=
+    // is refused before it is ever sent to Google (defence in depth on top of PKCE)
+    const state = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))))
+      .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
     localStorage.setItem('drive_pkce_verifier', verifier);
+    localStorage.setItem('drive_oauth_state', state);
     const params = new URLSearchParams({
+      state,
       client_id: googleClientId,
       redirect_uri: window.location.origin + window.location.pathname,
       response_type: 'code',
@@ -2614,6 +2643,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               {!driveConnected ? (
                 <div>
                 {driveStatus === 'expired' && <p style={{ margin:"0 0 8px", fontSize:12, color:"#e87a38", fontFamily:"sans-serif" }}>⚠ Google-tilkoblingen er utløpt. Koble til på nytt.</p>}
+                {driveError && <p role="alert" style={{ margin:"0 0 8px", fontSize:12, color:"#e87a38", fontFamily:"sans-serif", lineHeight:1.5 }}>⚠ {driveError}</p>}
                 <button onClick={connectGoogleDrive} disabled={!googleClientId || !googleClientSecret}
                   style={{ padding:"8px 16px", borderRadius:6,
                     border: (googleClientId && googleClientSecret) ? "1px solid #e8a838" : "1px solid #2a2b30",

@@ -63,7 +63,7 @@ class FakeGoogle:
         self.seq = 0
         self.log = []
         self.token_mode = "ok"  # refresh: ok | offline | 503 | invalid_grant
-        self.code_mode = "ok"   # code exchange: ok | invalid_client (Google replies with an error body)
+        self.code_mode = "ok"   # code exchange: ok | invalid_client (Google replies with an error body) | offline
         self.delay = {}         # request kind -> seconds; blocks the handler, so later requests queue behind it
         self.fail = {}          # request kind -> HTTP status to return instead of succeeding
 
@@ -124,6 +124,8 @@ class FakeGoogle:
                 return self._json(route, {"error": "backend_error"}, 503)
             if self.token_mode == "invalid_grant":
                 return self._json(route, {"error": "invalid_grant"}, 400)
+        if grant == "authorization_code" and self.code_mode == "offline":
+            return route.abort("internetdisconnected")
         if grant == "authorization_code" and self.code_mode == "invalid_client":
             return self._json(route, {"error": "invalid_client", "error_description": "Unauthorized client secret"})
         self._json(route, {"access_token": "at-new", "refresh_token": "rt", "expires_in": 3600})

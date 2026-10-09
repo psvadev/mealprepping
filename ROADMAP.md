@@ -33,7 +33,7 @@ D8 followed in October: recipes are now scale-tagged, so a portions or units mis
 
 What's left is deliberately parked:
 
-- **S5 OAuth `state` parameter** — PKCE already blocks login CSRF; adding `state` would change the Drive connect flow, so do it together with the next real-Drive test.
+- ~~**S5 OAuth `state` parameter**~~ — done in October with template gap f below. It changes the Drive connect flow, so the next real-Drive test must include connecting.
 - **S6 client secret in localStorage** — accepted trade-off for a personal app; revisit only if the audience grows.
 - **S8 personal email in early public commits** — informational; rewriting public history would be more disruptive than the exposure.
 - **PF3 one large component re-renders per keystroke** — profile before acting; nobody has reported lag.
@@ -50,7 +50,7 @@ Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATT
 - **c. Corrupt stored data** — an unreadable value still falls back to its default and is overwritten (the D16 leftover above); port the template's `<key>_corrupt` copy and recovery banner.
 - **d. Drive conflict** — the dialog can't be dismissed, so it never picks a side by accident, but it forces a choice on the spot; port the template's "decide later" path (status `conflict`, auto-save gated, "Velg nå" banner).
 - **e. Rescue download** — the ErrorBoundary file already imports and excludes credentials, but silently drops any value it can't parse — the very values a crash is likely about.
-- **f. OAuth callback** — an early return leaves the spent code in the URL, `?error=` is ignored, there is no `state` (S5 above), and failures surface in the top error bar rather than in Settings.
+- **f. OAuth callback** — done: `state` sent and checked (closes S5), URL and single-use values cleaned before any exit, `?error=` handled, every failure explained in Settings, and a return from Google starts in Settings (`tests/test_oauth.py`). Before the fix the same 20 checks failed on every engine — a callback with a forged `state` was exchanged and connected.
 - **g. Dates** — the two `+'T12:00:00'` display parses are correct for every time zone a Norwegian household is in; changing them is optional.
 
 **Two account chores, no code:** clear leftover `mp_*` keys from the old `psvadev.github.io` origin on every browser that used the app before the custom domain (May 2026), and add `reheatandeat.app` under GitHub → Settings → Pages → Verified domains to prevent takeover.
