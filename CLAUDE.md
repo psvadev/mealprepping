@@ -62,6 +62,7 @@ All keys use the `mp_` prefix.
 | `mp_driveSyncedHash` | string | Hash of the last payload this device and Drive agreed on — the base for three-way sync decisions |
 | `mp_preImportBackup` | object | Data replaced by the last import (without recipe cache) — powers "Angre siste import" |
 | `mp_lastExportAt` | string | ISO timestamp of the last plan export — drives the "Sist eksportert" line in Settings |
+| `mp_<key>_corrupt` | string | Raw text of a user-data key that couldn't be parsed, kept by `lsGet` before the default replaced it — drives the red "kunne ikke leses" banner. Never synced or exported |
 
 ---
 
@@ -215,6 +216,8 @@ One-click destructive actions call `offerUndo(message, restore)`: a toast with "
 
 **Every persistence effect must use a block body** — `useEffect(() => { lsSet(...); }, [x])`, never `useEffect(() => lsSet(...), [x])`. An expression-bodied arrow returns `lsSet`'s boolean, React takes a returned non-function as the effect's cleanup, and the production React build throws `TypeError: c is not a function` on the next re-run, white-screening the app into the ErrorBoundary. This is not caught by the dev-mode warning because the app ships the production build.
 
+**Unreadable stored data is kept, not overwritten.** When `lsGet` can't parse a value of a `RECOVER_KEYS` key (the Drive payload keys plus `checkedItems`), it stores the raw text as `mp_<key>_corrupt` before returning the default — otherwise the write-on-change effect would replace the only copy within the same render. A red banner on every view names what was lost (`DATA_LABELS`) and offers "Last ned kopien" (a JSON file with the raw texts under `unreadable`) and "Slett kopien" (with the undo toast). The `corruptData` state is read *after* every data `useState`, because that is when the copies are written. Settings and credentials aren't in `RECOVER_KEYS`; they simply fall back. The cross-tab `storage` listener ignores `_corrupt` keys — the default that replaced the data is the change that matters.
+
 `navigator.storage.persist()` is requested once on mount so Safari doesn't evict everything after 7 days without a visit.
 
 ---
@@ -358,6 +361,7 @@ Needs `pip install playwright` and `python -m playwright install firefox webkit 
 - **`harness.py`** — `open_app(browser, seed, raw, path, google, anthropic)`, a `FakeGoogle` (in-memory OAuth + Drive v3 with failure modes and delays), a `FakeAnthropic` (records request bodies; without one, every API call gets a 529 so no test can reach the real API), the CDN cache (`tests/.cdn-cache/`, gitignored; the bytes are unchanged, so SRI is still checked), and `scenario()`, which records an exception as a FAIL instead of ending the suite.
 - **`test_drive_sync.py`** — every `decideSync` branch, and each path through `doSync`: first device, fresh device, remote-only change, conflict (both answers, nothing uploaded while asking, slow download, deferring by button and by Escape), token refresh failures, `invalid_grant`, a trashed backup, the stale-tab guard.
 - **`test_ui.py`** — Escape: the race when a dialog opens from an async update, the import preview, the batch confirmation.
+- **`test_storage.py`** — unreadable stored data: kept verbatim, survives a reload, downloadable, deletable with undo; settings get no copy; a rescue copy from another tab doesn't block this one.
 - **`test_import_export.py`** — export contents and the absence of credentials, the round trip, preview/cancel/undo, hostile and malformed files, scale-tagged recipes across an import.
 - **`test_oauth.py`** — Connect sends and stores a `state`; every callback exit (match, forged or missing state, no verifier, cancelled, a foreign `?error=`, a rejected client, a network error) cleans the URL, removes the single-use values and explains itself in Settings.
 - **`test_environment.py`** — exact CDN pins with integrity hashes, and a tampered Babel that must be refused.

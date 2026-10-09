@@ -37,7 +37,7 @@ What's left is deliberately parked:
 - **S6 client secret in localStorage** — accepted trade-off for a personal app; revisit only if the audience grows.
 - **S8 personal email in early public commits** — informational; rewriting public history would be more disruptive than the exposure.
 - **PF3 one large component re-renders per keystroke** — profile before acting; nobody has reported lag.
-- **D16 leftovers** — a corrupt localStorage value still falls back to its default silently and is then overwritten. Fix if it is ever seen in practice: keep the raw value under a backup key before falling back.
+- ~~**D16 leftovers**~~ — done in October with template gap c below: an unreadable value is kept as `mp_<key>_corrupt` and offered back.
 - **L19 leftover** — in select mode, clicking an occupied grid cell copies that dish into the selected cell. Possibly intended (it's a quick way to plan the same dish twice), so ask before changing it.
 
 ## Template gaps (October 2026)
@@ -47,7 +47,7 @@ Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATT
 - **b. Escape handler before paint** — done: `useLayoutEffect` (`test_template_gaps.py`, all three engines).
 - **Test harness** — done: `tests/` with `harness.py`, Drive sync and import/export suites. Against the live `main` code (22ff4b3) they fail 16 of 32 Drive checks and 9 of 23 import checks — the documented September bugs, now reproduced by test.
 - **a. Babel pin** — done: 7.29.8 → 7.29.10 with `pin_cdn.py` (newer than the 7.29.9 the template pins; chosen by the user). `tests/test_environment.py` checks the pins and that a tampered script is refused.
-- **c. Corrupt stored data** — an unreadable value still falls back to its default and is overwritten (the D16 leftover above); port the template's `<key>_corrupt` copy and recovery banner.
+- **c. Corrupt stored data** — done: an unreadable user-data value is kept as `mp_<key>_corrupt` with a recovery banner (download, delete with undo); closes the D16 leftover above (`tests/test_storage.py`).
 - **d. Drive conflict** — done: "Bestem senere" and Escape pick neither side; sync pauses with a "Velg nå" banner, auto-save stays blocked, and automatic triggers don't reopen the question. Escape also cancels the import preview and "Fjerne hele batchen?" now (`test_drive_sync.py`, `test_ui.py`).
 - **e. Rescue download** — the ErrorBoundary file already imports and excludes credentials, but silently drops any value it can't parse — the very values a crash is likely about.
 - **f. OAuth callback** — done: `state` sent and checked (closes S5), URL and single-use values cleaned before any exit, `?error=` handled, every failure explained in Settings, and a return from Google starts in Settings (`tests/test_oauth.py`). Before the fix the same 20 checks failed on every engine — a callback with a forged `state` was exchanged and connected.

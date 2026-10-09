@@ -96,8 +96,16 @@ Svar ALLTID kun med gyldig JSON, ingen markdown, ingen forklaring utenfor JSON.`
 // ── localStorage helpers ───────────────────────────────────────────────────
 const PFX = 'mp_';
 function lsGet(key, fallback) {
-  try { const v = localStorage.getItem(PFX + key); return v !== null ? JSON.parse(v) : fallback; }
-  catch { return fallback; }
+  let v = null;
+  try { v = localStorage.getItem(PFX + key); return v !== null ? JSON.parse(v) : fallback; }
+  catch {
+    // Unreadable user data is kept as <key>_corrupt first: the write-on-change effects would otherwise
+    // overwrite the only copy with the default before anyone could rescue it (RECOVER_KEYS is below)
+    if (v !== null && RECOVER_KEYS.includes(key)) {
+      try { localStorage.setItem(PFX + key + '_corrupt', v); } catch {}   // best effort; the banner still shows
+    }
+    return fallback;
+  }
 }
 // A failed write means the quota is full — the app has to say so instead of losing edits silently
 let storageFullHandler = null;
@@ -463,6 +471,11 @@ function kassalSearchWord(ing) {
 const DRIVE_KEYS = ['plan','weeks','portions','suggestions','proteinTargets','maxTime','exclusions',
   'cuisineTargets','enabledCuisines','suggestionCount','units','shoppingLists','lastShoppingKeys',
   'recipeCache','favourites','mealNotes','mealHistory','freezerItems','dislikedMeals'];
+// User data worth rescuing when it can't be parsed (settings and credentials just fall back)
+const RECOVER_KEYS = [...DRIVE_KEYS, 'checkedItems'];
+const DATA_LABELS = { plan:'ukeplanen', freezerItems:'fryseren', mealNotes:'notatene', favourites:'favorittene',
+  suggestions:'forslagene', shoppingLists:'handlelistene', checkedItems:'avkrysningene i handlelisten',
+  recipeCache:'oppskriftsbufferen', mealHistory:'mathistorikken', dislikedMeals:'«Liker ikke»-listen' };
 // Fixed key order so local state and a downloaded backup hash identically
 const buildDrivePayload = src => Object.fromEntries(DRIVE_KEYS.map(k => [k, src?.[k] ?? null]));
 const isEmptyPayload = p => !(
@@ -599,6 +612,33 @@ function App() {
   const [driveSyncedAt,  setDriveSyncedAt]  = useState(() => lsGet('driveSyncedAt', null));
   const [driveConnected, setDriveConnected] = useState(() => !!lsGet('driveToken', null));
   const [hadDriveConnection] = useState(() => !!lsGet('driveFileId', null));
+
+  // Unreadable stored data that lsGet kept as mp_<key>_corrupt. Read after every data useState above,
+  // since that's when those copies are written.
+  const readCorrupt = () => {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(PFX) && k.endsWith('_corrupt')) out[k.slice(PFX.length, -'_corrupt'.length)] = localStorage.getItem(k);
+      }
+    } catch {}
+    return out;
+  };
+  const [corruptData, setCorruptData] = useState(readCorrupt);
+  const corruptKeys = Object.keys(corruptData);
+  const downloadCorrupt = () => downloadFile(
+    JSON.stringify({ exportedAt: new Date().toISOString(), unreadable: corruptData }, null, 2),
+    `middagsplan-uleselig-${localDateString()}.json`, 'application/json');
+  const discardCorrupt = () => {
+    const removed = corruptData;
+    for (const k of Object.keys(removed)) { try { localStorage.removeItem(PFX + k + '_corrupt'); } catch {} }
+    setCorruptData({});
+    offerUndo('Den uleselige kopien er slettet.', () => {
+      for (const [k, v] of Object.entries(removed)) { try { localStorage.setItem(PFX + k + '_corrupt', v); } catch {} }
+      setCorruptData(readCorrupt());
+    });
+  };
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 640);
@@ -1632,7 +1672,8 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
   useEffect(() => {
     const ignore = ['mp_driveToken', 'mp_driveSyncedAt', 'mp_driveSyncedHash', 'mp_driveFileId', 'mp_pendingDriveLoad'];
     const onStorage = (e) => {
-      if (!e.key || !e.key.startsWith(PFX) || ignore.includes(e.key)) return;
+      // A rescue copy (<key>_corrupt) isn't a change to the data; the default that replaced it is
+      if (!e.key || !e.key.startsWith(PFX) || ignore.includes(e.key) || e.key.endsWith('_corrupt')) return;
       tabStaleRef.current = true;
       setTabStale(true);
     };
@@ -1937,6 +1978,23 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a", flexShrink:0,
                 background:"transparent", color:"#d4a0a0", cursor:"pointer",
                 fontSize:11, fontFamily:"sans-serif" }}>↩ Prøv igjen</button>
+          </div>
+        )}
+
+        {corruptKeys.length > 0 && (
+          <div role="alert" style={{ background:"#2a1a1a", border:"1px solid #6a3a3a", borderRadius:8,
+            padding:"10px 14px", marginBottom:14, fontSize:12, color:"#d4a0a0", fontFamily:"sans-serif",
+            display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <span style={{ flex:"1 1 280px" }}>
+              ⚠ Noe av det lagrede kunne ikke leses ({corruptKeys.map(k => DATA_LABELS[k] || k).join(', ')}) og er
+              byttet ut med tomme standardverdier. Den uleselige kopien er tatt vare på — last den ned før du sletter den.
+            </span>
+            <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+              <button onClick={downloadCorrupt} style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a",
+                background:"transparent", color:"#d4a0a0", cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Last ned kopien</button>
+              <button onClick={discardCorrupt} style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a",
+                background:"transparent", color:"#907070", cursor:"pointer", fontSize:11, fontFamily:"sans-serif" }}>Slett kopien</button>
+            </div>
           </div>
         )}
 
