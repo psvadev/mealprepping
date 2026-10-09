@@ -46,7 +46,7 @@ Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATT
 
 - **b. Escape handler before paint** — done: `useLayoutEffect` (`test_template_gaps.py`, all three engines).
 - **Test harness** — done: `tests/` with `harness.py`, Drive sync and import/export suites. Against the live `main` code (22ff4b3) they fail 16 of 32 Drive checks and 9 of 23 import checks — the documented September bugs, now reproduced by test.
-- **a. Babel pin** — `pin_cdn.py` now proposes 7.29.10 (a newer patch than the 7.29.9 the template pinned).
+- **a. Babel pin** — done: 7.29.8 → 7.29.10 with `pin_cdn.py` (newer than the 7.29.9 the template pins; chosen by the user). `tests/test_environment.py` checks the pins and that a tampered script is refused.
 - **c. Corrupt stored data** — an unreadable value still falls back to its default and is overwritten (the D16 leftover above); port the template's `<key>_corrupt` copy and recovery banner.
 - **d. Drive conflict** — the dialog can't be dismissed, so it never picks a side by accident, but it forces a choice on the spot; port the template's "decide later" path (status `conflict`, auto-save gated, "Velg nå" banner).
 - **e. Rescue download** — the ErrorBoundary file already imports and excludes credentials, but silently drops any value it can't parse — the very values a crash is likely about.
