@@ -613,6 +613,7 @@ function App() {
   const syncChainRef = useRef(Promise.resolve());
   const syncDriveRef = useRef(null);
   const tabStaleRef = useRef(false);
+  const conflictPausedRef = useRef(false);  // the user closed the conflict question without choosing
   const payloadRef = useRef(null);
   const scaleRef = useRef({ portions: null, units: null });
 
@@ -761,6 +762,11 @@ function App() {
   useLayoutEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
+      // Top-most first. The conflict question defers (picks neither side); the stale-tab notice has
+      // no Escape on purpose — the only safe way out is a reload.
+      if (driveConflict) { deferDriveConflict(); return; }
+      if (importPreview) { setImportPreview(null); return; }
+      if (confirmRemoveBatch) { setConfirmRemoveBatch(null); return; }
       if (manualOptions) { setManualOptions(null); return; }
       if (suggestionModal) { setSuggestionModal(null); return; }
       if (confirmClear) { setConfirmClear(false); return; }
@@ -772,7 +778,8 @@ function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [planModal, suggestionModal, manualOptions, confirmClear, confirmClearCache, notesDraft]);
+  }, [planModal, suggestionModal, manualOptions, confirmClear, confirmClearCache, notesDraft,
+      driveConflict, importPreview, confirmRemoveBatch]);
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const allCuisines = useMemo(() => CUISINE_LIBRARY.filter(c => enabledCuisines.includes(c.key)), [enabledCuisines]);
@@ -1398,8 +1405,12 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
 
   // Reconciles this tab with the Drive backup. Never overwrites Drive with state that has
   // not been compared against it, and never discards local edits Drive has not seen.
-  const doSync = useCallback(async ({ checkRemote = false, retried = false } = {}) => {
+  const doSync = useCallback(async ({ checkRemote = false, retried = false, userAsked = false } = {}) => {
     if (tabStaleRef.current || !payloadRef.current) return;
+    // A deferred conflict waits for the user: automatic triggers (focus, online, startup retries) must
+    // not reopen the question. "Velg nå" / "Synkroniser nå" pass userAsked and ask again.
+    if (conflictPausedRef.current && !userAsked) return;
+    conflictPausedRef.current = false;
     const token = await getValidAccessToken(googleClientId, googleClientSecret);
     if (token === 'TOKEN_EXPIRED') { setDriveConnected(false); setDriveStatus('expired'); return; }
     if (!token || token === 'NETWORK') { setDriveStatus('error'); return; }
@@ -1497,6 +1508,15 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
     return syncChainRef.current;
   }, [doSync]);
   syncDriveRef.current = syncDrive;
+
+  // "Bestem senere" or Escape: pick neither side. Sync pauses — auto-save stays blocked because this tab
+  // hasn't reconciled (driveReadyRef is false), edits stay on this device, and only "Velg nå",
+  // "Synkroniser nå" or the next start ask again (template: ask() → null → status 'conflict').
+  const deferDriveConflict = () => {
+    conflictPausedRef.current = true;
+    setDriveConflict(null);
+    setDriveStatus('conflict');
+  };
 
   const resolveDriveConflict = (useRemote) => {
     const c = driveConflict;
@@ -1917,6 +1937,21 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
               style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #6a3a3a", flexShrink:0,
                 background:"transparent", color:"#d4a0a0", cursor:"pointer",
                 fontSize:11, fontFamily:"sans-serif" }}>↩ Prøv igjen</button>
+          </div>
+        )}
+
+        {driveConnected && driveStatus === 'conflict' && !driveConflict && (
+          <div role="status" style={{ background:"#1c1a12", border:"1px solid #4a3a1a", borderRadius:8,
+            padding:"10px 14px", marginBottom:14, fontSize:12, color:"#c8a84a",
+            fontFamily:"sans-serif", display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 }}>
+            <span style={{ flex:1 }}>
+              ⚠ Synkroniseringen med Google Drive er satt på pause: denne enheten og Drive har ulike endringer.
+              Det du endrer nå, lagres bare her til du velger.
+            </span>
+            <button onClick={() => syncDrive({ checkRemote:true, userAsked:true })}
+              style={{ padding:"4px 12px", borderRadius:6, border:"1px solid #4a3a1a", flexShrink:0,
+                background:"transparent", color:"#e8a838", cursor:"pointer",
+                fontSize:11, fontFamily:"sans-serif", fontWeight:600 }}>Velg nå</button>
           </div>
         )}
 
@@ -2663,7 +2698,7 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                     {driveStatus === 'conflict' && <span style={{ color:"#e87a38" }}>⚠ Velg versjon</span>}
                     {driveStatus === 'idle' && "Venter på endringer…"}
                   </span>
-                  <button onClick={() => syncDrive({ checkRemote:true })} style={{ padding:"5px 12px", borderRadius:6,
+                  <button onClick={() => syncDrive({ checkRemote:true, userAsked:true })} style={{ padding:"5px 12px", borderRadius:6,
                     border:"1px solid #2a2b30", background:"transparent",
                     color:"#b4b2c2", cursor:"pointer", fontSize:12, fontFamily:"sans-serif" }}>
                     Synkroniser nå
@@ -3118,6 +3153,9 @@ Svar med dette JSON-formatet:\n{\n  "meals": [\n    {\n      "name": "Norsk navn
                 {column("Google Drive", `Lagret ${savedAt}`, there)}
               </div>
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end", flexWrap:"wrap" }}>
+                <button onClick={deferDriveConflict} title="Ingen av dem blir overskrevet. Synkroniseringen venter til du velger."
+                  style={{ padding:"8px 16px", borderRadius:8, border:"none", background:"transparent", color:"#747280",
+                  cursor:"pointer", fontSize:13, fontFamily:"sans-serif", marginRight:"auto" }}>Bestem senere</button>
                 <button onClick={()=>resolveDriveConflict(true)} style={{ padding:"8px 16px", borderRadius:8,
                   border:"1px solid #2a2b30", background:"transparent", color:"#b4b2c2",
                   cursor:"pointer", fontSize:13, fontFamily:"sans-serif" }}>Bruk Drive-versjonen</button>

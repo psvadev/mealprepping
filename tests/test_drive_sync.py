@@ -30,9 +30,57 @@ def decide_sync_table(browser, tag):
     ctx.close()
 
 
+def setup_conflict(browser, delay_media=0):
+    """This device and Drive both changed since they last agreed (the base hash is stale)."""
+    g = FakeGoogle()
+    fid = g.add_file(drive_backup(plan=plan_with("Drive-rett")))
+    g.delay["media"] = delay_media
+    ctx, page, errors = open_app(browser, {**CREDS, "driveToken": VALID, "driveFileId": fid,
+                                           "driveSyncedHash": "stale", "weeks": 1,
+                                           "plan": plan_with("Lokal-rett")}, google=g)
+    asked = wait_until(page, lambda: shown(page, CONFLICT), timeout=12)
+    return g, fid, ctx, page, errors, asked
+
+
+def defer_conflict(browser, tag, how):
+    """Closing the conflict question without choosing must pick neither side (template gap d)."""
+    g, fid, ctx, page, errors, asked = setup_conflict(browser)
+    check(f"[{tag}] defer ({how}): the question was asked", asked)
+    if how == "button":
+        click(page, "Bestem senere")
+    else:
+        page.keyboard.press("Escape")
+    page.wait_for_timeout(400)
+    check(f"[{tag}] defer ({how}): the question closes", not shown(page, CONFLICT))
+    check(f"[{tag}] defer ({how}): a pause banner says sync is waiting", shown(page, "satt på pause"))
+    page.get_by_role("button", name="2", exact=True).first.click()      # an edit while paused
+    page.wait_for_timeout(3500)                                          # past the 2 s auto-save
+    check(f"[{tag}] defer ({how}): nothing is uploaded while paused", not g.writes(), str(g.kinds()))
+    check(f"[{tag}] defer ({how}): Drive keeps its own data", "Drive-rett" in json.dumps(g.content(fid).get("plan")))
+    check(f"[{tag}] defer ({how}): this device keeps its own data", first_plan_name(page) == "Lokal-rett")
+    page.evaluate("window.dispatchEvent(new Event('online'))")          # an automatic trigger
+    page.wait_for_timeout(1500)
+    check(f"[{tag}] defer ({how}): automatic checks don't reopen the question", not shown(page, CONFLICT))
+    if how == "button":
+        click(page, "Velg nå")
+        reasked = wait_until(page, lambda: shown(page, CONFLICT))
+        check(f"[{tag}] defer: 'Velg nå' asks again", reasked)
+        click(page, "Behold denne enheten")
+        wait_until(page, lambda: "patch" in g.kinds())
+        saved = g.content(fid)
+        check(f"[{tag}] defer: keeping this device uploads it, edits made while paused included",
+              "Lokal-rett" in json.dumps(saved.get("plan")) and saved.get("weeks") == 2,
+              f"weeks={saved.get('weeks')}")
+        check(f"[{tag}] defer: the banner goes once it's resolved", not shown(page, "satt på pause"))
+    check(f"[{tag}] defer ({how}): no page errors", not errors, "; ".join(errors))
+    ctx.close()
+
+
 def run(browser, tag):
     scenario(tag, "decideSync", lambda: decide_sync_table(browser, tag))
     scenario(tag, "sync paths", lambda: sync_paths(browser, tag))
+    scenario(tag, "defer by button", lambda: defer_conflict(browser, tag, "button"))
+    scenario(tag, "defer by Escape", lambda: defer_conflict(browser, tag, "Escape"))
 
 
 def sync_paths(browser, tag):
@@ -77,16 +125,7 @@ def sync_paths(browser, tag):
     ctx.close()
 
     # ── Both changed: ask, write nothing until answered, honour the answer ──
-    def conflict_setup(delay_media=0):
-        g = FakeGoogle()
-        fid = g.add_file(drive_backup(plan=plan_with("Drive-rett")))
-        g.delay["media"] = delay_media
-        ctx, page, errors = open_app(browser, {**CREDS, "driveToken": VALID, "driveFileId": fid,
-                                               "driveSyncedHash": "stale", "weeks": 1,
-                                               "plan": plan_with("Lokal-rett")}, google=g)
-        asked = wait_until(page, lambda: shown(page, CONFLICT), timeout=12)
-        return g, fid, ctx, page, errors, asked
-
+    conflict_setup = lambda delay_media=0: setup_conflict(browser, delay_media)
     g, fid, ctx, page, errors, asked = conflict_setup()
     check(f"[{tag}] both changed: the conflict dialog appears", asked)
     page.wait_for_timeout(3000)                                          # past the 2 s auto-save
