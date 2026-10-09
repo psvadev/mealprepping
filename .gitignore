@@ -8,3 +8,8 @@ Thumbs.db
 
 # Local only
 docs/
+
+# Python test harness - bytecode caches
+__pycache__/
+# CDN scripts cached by tests/harness.py - refetched on demand, and ~3 MB
+tests/.cdn-cache/

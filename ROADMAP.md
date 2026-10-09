@@ -14,9 +14,9 @@ Features that could fit the single-file constraint but haven't been prioritised.
 A local companion app for tracking physical freezer containers with QR labels. Potential to integrate container availability into the freezer logging flow. No priority set.
 
 ### Automated browser tests before pushing
-The repo has no tests or CI; every change is checked by hand in the browser before pushing. The September 2026 audit fixes were verified with Python Playwright scripts that serve the app with `python -m http.server`, mock `api.anthropic.com`, `oauth2.googleapis.com` and `www.googleapis.com` (including an in-memory Drive file), and drive the real UI in Chromium. Checked in as a `tests/` folder, they would give a one-command pre-push check (`python tests/run.py`), and could later run in a GitHub Actions workflow on push.
+**Started October 2026:** `tests/` now exists (see CLAUDE.md → Tests) with a shared harness and suites for Drive sync and import/export, run on Firefox, WebKit and Chromium with `python tests/run_all.py`. Still to do: move the remaining useful checks from the local `docs/audit-tests/` phases (shopping list, freezer, allergen check, undo toast, Escape) into `tests/` by area, and later run `run_all.py` in a GitHub Actions workflow on push.
 
-**Fits the constraint:** tests are dev-only tooling. The app itself stays a single `index.html` with no build step. Needs only Python 3 and `pip install playwright` plus `python -m playwright install chromium`; no Node.
+**Fits the constraint:** tests are dev-only tooling. The app itself stays a single `index.html` with no build step. Needs only Python 3 and Playwright; no Node.
 
 ### Structured allergen management
 The current exclusions field is free text, which works fine for a personal family app where the AI understands context. A proper allergen system — predefined chips for the 14 EU allergens (gluten, laktose, nøtter, egg, skalldyr, etc.) plus a free-text overflow field — would reduce typo risk. For a single family the free-text field is sufficient.
@@ -45,6 +45,7 @@ What's left is deliberately parked:
 Patterns from the template app (`C:\temp\GitHub\template`, its AUDIT.md and PATTERNS.md), checked against this app on 2026-10-09. One commit per item.
 
 - **b. Escape handler before paint** — done: `useLayoutEffect` (`test_template_gaps.py`, all three engines).
+- **Test harness** — done: `tests/` with `harness.py`, Drive sync and import/export suites. Against the live `main` code (22ff4b3) they fail 16 of 32 Drive checks and 9 of 23 import checks — the documented September bugs, now reproduced by test.
 - **a. Babel pin** — `pin_cdn.py` now proposes 7.29.10 (a newer patch than the 7.29.9 the template pinned).
 - **c. Corrupt stored data** — an unreadable value still falls back to its default and is overwritten (the D16 leftover above); port the template's `<key>_corrupt` copy and recovery banner.
 - **d. Drive conflict** — the dialog can't be dismissed, so it never picks a side by accident, but it forces a choice on the spot; port the template's "decide later" path (status `conflict`, auto-save gated, "Velg nå" banner).

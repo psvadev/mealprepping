@@ -337,3 +337,27 @@ python3 -m http.server 8080
 ```
 
 Open `http://localhost:8080`. Add Anthropic API key in ⚙ Innstillinger before generating suggestions.
+
+---
+
+## Tests
+
+`tests/` holds Python + Playwright suites, modelled on the template app's harness (no Node; the app stays npm-free). Run before committing anything that touches storage, import/export or Drive:
+
+```
+python tests/run_all.py                      # Firefox, WebKit and Chromium
+BROWSERS=firefox python tests/run_all.py     # one engine, for a quick loop
+python tests/test_drive_sync.py              # one suite
+```
+
+Needs `pip install playwright` and `python -m playwright install firefox webkit chromium`. Each suite starts its own server on port 8766 (`PORT=` to change it). Firefox is the main desktop browser and WebKit is every iOS browser, so a change isn't verified until all three engines pass.
+
+- **`harness.py`** — `open_app(browser, seed, raw, path, google, anthropic)`, a `FakeGoogle` (in-memory OAuth + Drive v3 with failure modes and delays), a `FakeAnthropic` (records request bodies; without one, every API call gets a 529 so no test can reach the real API), the CDN cache (`tests/.cdn-cache/`, gitignored; the bytes are unchanged, so SRI is still checked), and `scenario()`, which records an exception as a FAIL instead of ending the suite.
+- **`test_drive_sync.py`** — every `decideSync` branch, and each path through `doSync`: first device, fresh device, remote-only change, conflict (both answers, nothing uploaded while asking, slow download), token refresh failures, `invalid_grant`, a trashed backup, the stale-tab guard.
+- **`test_import_export.py`** — export contents and the absence of credentials, the round trip, preview/cancel/undo, hostile and malformed files, scale-tagged recipes across an import.
+
+**Two rules for new tests**, both learned the hard way:
+- **Seed through `open_app`, which uses an init script.** Loading the app, seeding storage from outside and reloading races the app's persistence effects: on WebKit (slow in-browser Babel) the defaults were written back over the seed in 5 of 6 runs.
+- **Read text with `shown()` / `root_text()`, which read `#root`.** `document.body`'s text includes the inline Babel source, which contains every UI string; and on WebKit `get_by_text()` missed a dialog that was on screen. `page.wait_for_function` with a string is refused by the app's CSP (no `unsafe-eval`) — poll with `wait_until()`.
+
+The older `docs/audit-tests/` suites (local, gitignored) seed the racy way, so they are only trustworthy on Chromium; their still-useful checks are being moved into `tests/` by area.
